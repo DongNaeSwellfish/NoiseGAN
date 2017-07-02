@@ -17,13 +17,13 @@ import numpy as np
 class Trainer(object):
     def __init__(self, trainloader, testloader):
         self.num_gpu = 1
-        self.batch_size = 40
+        self.batch_size = 25
 
         self.train_loader = trainloader
         self.test_loader = testloader
 
-        self.generator = Generator(conv_dim=64).cuda()
-        self.discriminator = Discriminator(image_size=96, conv_dim=64).cuda()
+        self.generator = Generator(conv_dim=128).cuda()
+        self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
         self.cnn = models.resnet50(pretrained=True)
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
         self.finetune(allow=True)
@@ -54,7 +54,7 @@ class Trainer(object):
     # Train the fully-connected layer of resnet50 with STL10 dataset
     def train_classifier(self):
         total_step = len(self.train_loader)
-        for epoch in range(5):
+        for epoch in range(1):
             for i, images in enumerate(self.train_loader):
                 self.cnn.fc.zero_grad()
                 images_label = Variable(images[1]).long().cuda()
@@ -77,9 +77,8 @@ class Trainer(object):
                     for im, la in self.test_loader:
                         # volatile means this Variable requires no grad computation
                         im_test = Variable(im, volatile=True).cuda()
-                        test_img_resized = func.upsample_bilinear(im_test, size=(224, 224))
-
-                        outputs = self.cnn(test_img_resized.detach())
+                        img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
+                        outputs = self.cnn(img_test_resized.detach())
                         _, predicted = torch.max(outputs.data, 1)
 
                         a = func.softmax(outputs)
@@ -113,21 +112,22 @@ class Trainer(object):
                 labels_real = labels_real.cuda()
                 labels_fake = labels_fake.cuda()
                 images = Variable(images)
+                images_resized = func.upsample_bilinear(images, (224, 224))
 
                 self.generator.zero_grad()
                 self.discriminator.zero_grad()
 
                 # Train discriminator with real image
-                mask = self.generator(images)
+                mask = self.generator(images_resized)
                 mask = mask * 0.01  # mask *= 0.01 is inplace operation(cannot compute gradient)
-                logit_real = self.discriminator(images.detach())
-                loss_real = self.criterion_D(logit_real, labels_real)
-                loss_real.backward()
+                logit_real = self.discriminator(images_resized.detach())
+                loss_real_real = self.criterion_D(logit_real, labels_real)
+                loss_real_real.backward()
 
                 # Train discriminator with fake image
-                logit_fake = self.discriminator(images.detach()+mask)
-                loss_fake = self.criterion_D(logit_fake, labels_fake)
-                loss_fake.backward(retain_variables=True)
+                logit_fake = self.discriminator(images_resized.detach()+mask)
+                loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
+                loss_fake_fake.backward(retain_variables=True)
 
                 self.optim_D.step()
 
@@ -136,22 +136,25 @@ class Trainer(object):
                 #                  train Generator                   #
                 ######################################################
                 # Train generator with fake image with gradient uphill
-                loss_G = -loss_fake
-                loss_G.backward()
+                self.discriminator.zero_grad()
+                self.generator.zero_grad()
+                self.cnn.fc.zero_grad()
+                logit_fake = self.discriminator(images_resized.detach() + mask)
+                loss_fake_real = self.criterion_D(logit_fake, labels_real)
+                loss_fake_real.backward(retain_variables=True)
                 self.optim_G.step()
+                # loss_G = -loss_fake
+                # loss_G.backward()
+                # self.optim_G.step()
 
                 self.discriminator.zero_grad()
                 self.generator.zero_grad()
                 self.cnn.fc.zero_grad()
 
                 # Train generator with fake image with classifier (resnet50)
-                mask = self.generator(images)
+                mask = self.generator(images_resized)
                 mask = mask * 0.01
-
-                img_resized = func.upsample_bilinear(images, size=(224, 224))
-                mask_resized = func.upsample_bilinear(mask, size=(224, 224))
-
-                cnn_out = self.cnn(img_resized.detach()+mask_resized)
+                cnn_out = self.cnn(images_resized.detach()+mask)
                 cnn_out = func.softmax(cnn_out)
 
                 label_target = Variable(torch.ones((self.batch_size, 10))*0.1).cuda()
@@ -160,8 +163,6 @@ class Trainer(object):
                 loss_cls.backward()
                 self.optim_G.step()
 
-                loss_g = loss_fake + loss_cls
-
                 # Test the Model
                 if (i % 124 == 0) and (i != 0):
                     correct = 0
@@ -169,12 +170,12 @@ class Trainer(object):
                     correct_meanscore = 0
                     for im, la in self.test_loader:
                         im_test = Variable(im, volatile=True).cuda()
-                        mask_test = self.generator(im_test)
-                        mask_test = mask_test * 0.01
+                        img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
 
-                        test_img_resized = func.upsample_bilinear(im_test, size=(224, 224))
-                        test_mask_resized = func.upsample_bilinear(mask_test, size=(224, 224))
-                        outputs = self.cnn(test_img_resized + test_mask_resized)
+                        mask_test = self.generator(img_test_resized)
+                        mask_test = mask_test * 0.01
+                        outputs = self.cnn(img_test_resized + mask_test)
+
                         _, predicted = torch.max(outputs.data, 1)
                         a = func.softmax(outputs)
                         b = torch.max(a, 1)
@@ -185,7 +186,7 @@ class Trainer(object):
                     correct_meanscore /= 200
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
-
-                print('Epoch [%d/%d], Step[%d/%d], d_real_loss: %.4f, ''d_fake_loss: %.4f, g_loss: %.4f, cls_loss: %.4f'
-                      % (epoch + 1, epoch, i + 1, total_step, loss_real.data[0], loss_fake.data[0], loss_g.data[0], loss_cls.data[0]))
+                if (i % 10) == 0:
+                    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f, ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f'
+                          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0], loss_fake_fake.data[0], loss_cls.data[0]))
 
