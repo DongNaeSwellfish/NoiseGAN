@@ -5,7 +5,7 @@ import os
 from torch import optim
 from torch.autograd import Variable
 from model import Discriminator
-from model import Generator
+from model import Encoder, Decoder
 import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 import torchvision.models as models
@@ -22,18 +22,20 @@ class Trainer(object):
         self.train_loader = trainloader
         self.test_loader = testloader
 
-        self.generator = Generator(conv_dim=64).cuda()
+        self.encoder = Encoder().cuda()
+        self.decoder = Decoder(conv_dim=64).cuda()
         self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
         self.cnn = models.resnet50(pretrained=True)
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
         self.finetune(allow=True)
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.001)
-        self.optim_G_dis = optim.Adam(self.generator.parameters(), lr=0.0005)
-        self.optim_G_cls = optim.Adam(self.generator.parameters(), lr=0.0001)
+        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.0005)
+        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.0001)
         self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.0002)
         if torch.cuda.is_available():
-            self.generator.cuda()
+            self.encoder.cuda()
+            self.decoder.cuda()
             self.discriminator.cuda()
             self.cnn.cuda()
             self.cnn.fc.cuda()
@@ -59,7 +61,7 @@ class Trainer(object):
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(1):
+        for epoch in range(10):
             for i, images in enumerate(self.train_loader):
                 self.cnn.fc.zero_grad()
                 images_label = Variable(images[1]).long().cuda()
@@ -111,7 +113,7 @@ class Trainer(object):
         total_step = len(self.train_loader)
         for epoch in range(200):
             self.discriminator.train()
-            self.generator.train()
+            self.decoder.train()
             for i, images in enumerate(self.train_loader):
                 ######################################################
                 #                train Discriminator                 #
@@ -127,11 +129,11 @@ class Trainer(object):
                 images = Variable(images)
                 images_resized = func.upsample_bilinear(images, (224, 224))
 
-                self.generator.zero_grad()
+                self.decoder.zero_grad()
                 self.discriminator.zero_grad()
 
                 # Train discriminator with real image
-                mask = func.tanh(self.generator(images_resized))
+                mask = func.tanh(self.decoder(self.encoder(images_resized)))
                 mask = mask * 0.1  # mask *= 0.01 is inplace operation(cannot compute gradient)
                 logit_real = self.discriminator(images_resized.detach())
                 loss_real_real = self.criterion_D(logit_real, labels_real)
@@ -150,7 +152,7 @@ class Trainer(object):
                 #                  train Generator                   #
                 ######################################################
                 self.discriminator.zero_grad()
-                self.generator.zero_grad()
+                self.decoder.zero_grad()
                 self.cnn.fc.zero_grad()
                 logit_fake = self.discriminator(images_resized.detach() + mask)
                 loss_fake_real = self.criterion_D(logit_fake, labels_real)
@@ -159,11 +161,11 @@ class Trainer(object):
                 self.optim_G_dis.step()
 
                 self.discriminator.zero_grad()
-                self.generator.zero_grad()
+                self.decoder.zero_grad()
                 self.cnn.fc.zero_grad()
 
                 # Train generator with fake image with classifier (resnet50)
-                mask = func.tanh(self.generator(images_resized))
+                mask = func.tanh(self.decoder(self.encoder(images_resized)))
                 mask = mask * 0.1
                 cnn_out = self.cnn(images_resized.detach()+mask)
                 cnn_out = func.softmax(cnn_out)
@@ -197,7 +199,7 @@ class Trainer(object):
                         label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
                         for index in range(self.batch_size):
                             label_mask[index, la[index]] = 1
-                        mask_test = func.tanh(self.generator(img_test_resized) * 0.1)
+                        mask_test = func.tanh(self.decoder(self.encoder(img_test_resized)) * 0.1)
                         reconst_images = img_test_resized + mask_test
                         outputs = self.cnn(reconst_images)
 
