@@ -21,24 +21,40 @@ def conv(c_in, c_out, k_size, stride=2, pad=1, bn=True):
 
 class Generator(nn.Module):
     """Generator containing 7 deconvolutional layers."""
-    def __init__(self, conv_dim=128):
+    def __init__(self, conv_dim=64):
         super(Generator, self).__init__()
         self.encoder = models.resnet50(pretrained=True)
         self.encoder = nn.Sequential(*list(self.encoder.children())[:-2])
         self.finetune(allow=True)
-        self.deconv1 = deconv(conv_dim * 16, conv_dim * 8, 4)
+        self.deconv1 = deconv(conv_dim * 32, conv_dim * 16, 4)
+        self.deconv1_1 = deconv(conv_dim * 16, conv_dim * 8, 3, stride=1)
+        self.deconv1_2 = deconv(conv_dim * 8, conv_dim * 8, 3, stride=1)
         self.deconv2 = deconv(conv_dim * 8, conv_dim * 4, 4)
+        self.deconv2_1 = deconv(conv_dim * 4, conv_dim * 4, 3, stride=1)
+        self.deconv2_2 = deconv(conv_dim * 4, conv_dim * 4, 3, stride=1)
         self.deconv3 = deconv(conv_dim * 4, conv_dim * 2, 4)
+        self.deconv3_1 = deconv(conv_dim * 2, conv_dim * 2, 3, stride=1)
+        self.deconv3_2 = deconv(conv_dim * 2, conv_dim * 2, 3, stride=1)
         self.deconv4 = deconv(conv_dim * 2, conv_dim, 4)
+        self.deconv4_1 = deconv(conv_dim, conv_dim, 3, stride=1)
+        self.deconv4_2 = deconv(conv_dim, conv_dim, 3, stride=1)
         self.deconv5 = deconv(conv_dim, 3, 4, bn=False)
 
     def forward(self, x):
-        out = self.encoder(x)                        # (?, 2048, 7, 7)
-        out = F.leaky_relu(self.deconv1(out), 0.05)  # (?, 1024, 14, 14)
-        out = F.leaky_relu(self.deconv2(out), 0.05)  # (?, 512, 28, 28)
-        out = F.leaky_relu(self.deconv3(out), 0.05)  # (?, 256, 56, 56)
-        out = F.leaky_relu(self.deconv4(out), 0.05)  # (?, 128, 112, 112)
-        out = F.tanh(self.deconv5(out))              # (?, 3, 224, 224)
+        out = self.encoder(x)                          # (?, 2048, 7, 7)
+        out = F.leaky_relu(self.deconv1(out.detach()), 0.05)  # (?, 1024, 14, 14)
+        out = F.leaky_relu(self.deconv1_1(out), 0.05)  # (?, 512, 28, 28)
+        out = F.leaky_relu(self.deconv1_2(out), 0.05)  # (?, 512, 28, 28)
+        out = F.leaky_relu(self.deconv2(out),   0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.deconv2_1(out), 0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.deconv2_2(out), 0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.deconv3(out),   0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.deconv3_1(out), 0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.deconv3_2(out), 0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.deconv4(out),   0.05)  # (?, 64, 112, 112)
+        out = F.leaky_relu(self.deconv4_1(out), 0.05)  # (?, 64, 112, 112)
+        out = F.leaky_relu(self.deconv4_2(out), 0.05)  # (?, 64, 112, 112)
+        out = F.tanh(self.deconv5(out))                # (?, 3, 224, 224)
         return out
 
     def finetune(self, allow=False):
