@@ -1,23 +1,18 @@
 import torch
 import torch.nn as nn
 import torchvision
-import os
 from torch import optim
 from torch.autograd import Variable
 from model import Discriminator
 from model import Encoder, Decoder
-import torchvision.datasets as dsets
-import torchvision.transforms as transforms
 import torchvision.models as models
 import torch.nn.functional as func
-import torch.autograd as autograd
-import numpy as np
 
 
 class Trainer(object):
     def __init__(self, trainloader, testloader):
         self.num_gpu = 1
-        self.batch_size = 25
+        self.batch_size = 20
 
         self.train_loader = trainloader
         self.test_loader = testloader
@@ -29,23 +24,25 @@ class Trainer(object):
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
         self.finetune(allow=True)
 
-        self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.001)
-        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.0005)
-        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.0001)
-        self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.0002)
+        self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
+        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.001)
+        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.0005)
+        self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.0005)
+
+        self.criterion_C = nn.CrossEntropyLoss()
+        self.criterion_G_CNN = nn.MSELoss()
+        self.criterion_G = nn.CrossEntropyLoss()
+        self.criterion_D = nn.CrossEntropyLoss()
+
+        self.real_label = 1
+        self.fake_label = 0
+
         if torch.cuda.is_available():
             self.encoder.cuda()
             self.decoder.cuda()
             self.discriminator.cuda()
             self.cnn.cuda()
             self.cnn.fc.cuda()
-
-        self.criterion_C = nn.CrossEntropyLoss()
-        self.criterion_G_CNN = nn.MSELoss()
-        self.criterion_G = nn.CrossEntropyLoss()
-        self.criterion_D = nn.CrossEntropyLoss()
-        self.real_label = 1
-        self.fake_label = 0
 
     # if allow = True, classifier resnet50 computes grad
     def finetune(self, allow=True):
@@ -61,7 +58,7 @@ class Trainer(object):
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(10):
+        for epoch in range(5):
             for i, images in enumerate(self.train_loader):
                 self.cnn.fc.zero_grad()
                 images_label = Variable(images[1]).long().cuda()
@@ -82,7 +79,7 @@ class Trainer(object):
                         epoch + 1, i, total_step, loss_fc.data[0]))
 
                 # evaluation with test dataset (800 per class)
-                if (i % 199 == 0) and (i != 0):
+                if (i % 249 == 0) and (i != 0):
                     correct = 0
                     total = 0
                     correct_meanscore = 0
@@ -101,7 +98,7 @@ class Trainer(object):
                         correct_meanscore += c
                         total += la.size(0)
                         correct += (predicted.cpu() == la).sum()
-                    correct_meanscore /= 320  # 200 = number of iteration in one test epoch
+                    correct_meanscore /= 400  # 200 = number of iteration in one test epoch
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
 
@@ -134,19 +131,24 @@ class Trainer(object):
 
                 # Train discriminator with real image
                 mask = func.tanh(self.decoder(self.encoder(images_resized)))
-                mask = mask * 0.1  # mask *= 0.01 is inplace operation(cannot compute gradient)
+                mask = mask * 0.5  # mask *= 0.01 is inplace operation(cannot compute gradient)
                 logit_real = self.discriminator(images_resized.detach())
                 loss_real_real = self.criterion_D(logit_real, labels_real)
                 loss_real_real.backward()
+                clip_gradient(self.optim_D, 0.5)
+                self.optim_D.step()
+
+                self.discriminator.zero_grad()
+                self.decoder.zero_grad()
 
                 # Train discriminator with fake image
                 logit_fake = self.discriminator(images_resized.detach()+mask)
                 loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
                 loss_fake_fake.backward(retain_variables=True)
 
-                if (i % 5) == 0:
-                    clip_gradient(self.optim_D, 0.5)
-                    self.optim_D.step()
+                # if (i % 2) == 0:
+                clip_gradient(self.optim_D, 0.5)
+                self.optim_D.step()
 
                 ######################################################
                 #                  train Generator                   #
@@ -156,7 +158,7 @@ class Trainer(object):
                 self.cnn.fc.zero_grad()
                 logit_fake = self.discriminator(images_resized.detach() + mask)
                 loss_fake_real = self.criterion_D(logit_fake, labels_real)
-                loss_fake_real.backward()  #(retain_variables=True)
+                loss_fake_real.backward()  # (retain_variables=True)
                 clip_gradient(self.optim_G_dis, 0.5)
                 self.optim_G_dis.step()
 
@@ -166,12 +168,12 @@ class Trainer(object):
 
                 # Train generator with fake image with classifier (resnet50)
                 mask = func.tanh(self.decoder(self.encoder(images_resized)))
-                mask = mask * 0.1
+                mask = mask * 0.5
                 cnn_out = self.cnn(images_resized.detach()+mask)
                 cnn_out = func.softmax(cnn_out)
 
                 label_target = Variable(torch.zeros((self.batch_size, 1))).cuda()
-                # MSE loss with uniform distribution of 0.1
+                # MSE loss with uniform distribution of 0.5
                 one_mask = Variable(torch.zeros(self.batch_size, 10)).cuda()
                 for index in range(self.batch_size):
                     one_mask[index, image_class[index]] = 1
@@ -183,11 +185,13 @@ class Trainer(object):
                 self.optim_G_cls.step()
 
                 if (i % 10) == 0:
-                    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f, ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f'
-                          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0], loss_fake_fake.data[0], loss_cls.data[0]))
+                    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
+                          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f'
+                          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0],
+                             loss_fake_fake.data[0], loss_cls.data[0]))
 
                 # Test the Model
-                if (i % 199 == 0) and (i != 0):
+                if (i % 249 == 0) and (i != 0):
                     correct = 0
                     total = 0
                     correct_meanscore = 0
@@ -199,7 +203,7 @@ class Trainer(object):
                         label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
                         for index in range(self.batch_size):
                             label_mask[index, la[index]] = 1
-                        mask_test = func.tanh(self.decoder(self.encoder(img_test_resized)) * 0.1)
+                        mask_test = func.tanh(self.decoder(self.encoder(img_test_resized))*0.5)
                         reconst_images = img_test_resized + mask_test
                         outputs = self.cnn(reconst_images)
 
@@ -210,10 +214,13 @@ class Trainer(object):
                         correct_meanscore += c
                         total += la.size(0)
                         correct += (predicted.cpu() == la).sum()
-                        if j % 320 == 0:
-                            torchvision.utils.save_image(img_test_resized.data.cpu(), './data/images_%d.jpg' % (epoch + 1))
-                            torchvision.utils.save_image(mask_test.data.cpu(), './data/noise_%d.jpg' % (epoch + 1))
-                            torchvision.utils.save_image(reconst_images.data.cpu(), './data/reconst_images_%d.jpg' % (epoch + 1))
-                    correct_meanscore /= 320
+                        if j % 100 == 0:
+                            torchvision.utils.save_image(img_test_resized.data.cpu(),
+                                                         './data/epoch%dimages_%d.jpg' % (epoch + 1, j))
+                            torchvision.utils.save_image(mask_test.data.cpu(),
+                                                         './data/epoch%dnoise_%d.jpg' % (epoch + 1, j))
+                            torchvision.utils.save_image(reconst_images.data.cpu(),
+                                                         './data/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
+                    correct_meanscore /= 400
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
