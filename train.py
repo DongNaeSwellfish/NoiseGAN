@@ -4,7 +4,7 @@ import torchvision
 from torch import optim
 from torch.autograd import Variable
 from model import Discriminator
-from model import Encoder, Decoder
+from model import Decoder
 import torchvision.models as models
 import torch.nn.functional as func
 
@@ -17,7 +17,6 @@ class Trainer(object):
         self.train_loader = trainloader
         self.test_loader = testloader
 
-        self.encoder = Encoder().cuda()
         self.decoder = Decoder(conv_dim=64).cuda()
         self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
         self.cnn = models.resnet50(pretrained=True)
@@ -26,19 +25,20 @@ class Trainer(object):
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
         self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.001)
-        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.0005)
+        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.001)
         self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.0005)
+        self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.0005)
 
         self.criterion_C = nn.CrossEntropyLoss()
         self.criterion_G_CNN = nn.MSELoss()
         self.criterion_G = nn.CrossEntropyLoss()
         self.criterion_D = nn.CrossEntropyLoss()
+        self.criterion_L1 = nn.SmoothL1Loss()
 
         self.real_label = 1
         self.fake_label = 0
 
         if torch.cuda.is_available():
-            self.encoder.cuda()
             self.decoder.cuda()
             self.discriminator.cuda()
             self.cnn.cuda()
@@ -130,8 +130,8 @@ class Trainer(object):
                 self.discriminator.zero_grad()
 
                 # Train discriminator with real image
-                mask = func.tanh(self.decoder(self.encoder(images_resized)))
-                mask = mask * 0.5  # mask *= 0.01 is inplace operation(cannot compute gradient)
+                mask = self.decoder(images_resized)
+                # mask = mask * 0.5  # mask *= 0.01 is inplace operation(cannot compute gradient)
                 logit_real = self.discriminator(images_resized.detach())
                 loss_real_real = self.criterion_D(logit_real, labels_real)
                 loss_real_real.backward()
@@ -165,10 +165,20 @@ class Trainer(object):
                 self.discriminator.zero_grad()
                 self.decoder.zero_grad()
                 self.cnn.fc.zero_grad()
+                mask = self.decoder(images_resized)
+                image_l1 = mask + images_resized
+                loss_l1 = self.criterion_L1(image_l1, images_resized)
+                loss_l1 = loss_l1 * 100
+                loss_l1.backward()
+                self.optim_L1.step()
+
+                self.discriminator.zero_grad()
+                self.decoder.zero_grad()
+                self.cnn.fc.zero_grad()
 
                 # Train generator with fake image with classifier (resnet50)
-                mask = func.tanh(self.decoder(self.encoder(images_resized)))
-                mask = mask * 0.5
+                mask = self.decoder(images_resized)
+                # mask = mask * 0.5
                 cnn_out = self.cnn(images_resized.detach()+mask)
                 cnn_out = func.softmax(cnn_out)
 
@@ -186,9 +196,9 @@ class Trainer(object):
 
                 if (i % 10) == 0:
                     print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
-                          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f'
+                          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f'
                           % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0],
-                             loss_fake_fake.data[0], loss_cls.data[0]))
+                             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0]))
 
                 # Test the Model
                 if (i % 249 == 0) and (i != 0):
@@ -203,7 +213,7 @@ class Trainer(object):
                         label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
                         for index in range(self.batch_size):
                             label_mask[index, la[index]] = 1
-                        mask_test = func.tanh(self.decoder(self.encoder(img_test_resized))*0.5)
+                        mask_test = self.decoder(img_test_resized)
                         reconst_images = img_test_resized + mask_test
                         outputs = self.cnn(reconst_images)
 
