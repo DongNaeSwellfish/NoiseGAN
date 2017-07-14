@@ -19,6 +19,36 @@ def conv(c_in, c_out, k_size, stride=2, pad=1, bn=True):
     return nn.Sequential(*layers)
 
 
+class ConvMaskGenerator(nn.Module):
+    def __init__(self, conv_dim=64):
+        super(ConvMaskGenerator, self).__init__()
+        self.conv1 = conv(3, conv_dim, 4, bn=False)
+        self.conv1_2 = conv(conv_dim, conv_dim, 3, stride=1)
+        self.conv2 = conv(conv_dim, conv_dim * 2, 4)
+        self.conv2_2 = conv(conv_dim * 2, conv_dim * 2, 3, stride=1)
+        self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
+        self.conv3_2 = conv(conv_dim * 4, conv_dim * 4, 3, stride=1)
+        self.conv4 = conv(conv_dim * 4, conv_dim * 2, 4)
+        self.conv4_2 = conv(conv_dim * 2, conv_dim * 2, 3, stride=1)
+        self.conv5 = conv(conv_dim * 2, conv_dim, 4)
+        self.conv5_2 = conv(conv_dim, conv_dim, 3, stride=1)
+        self.conv5_3 = conv(conv_dim, 9, 3, stride=1)
+
+    def forward(self, x):
+        out = F.leaky_relu(self.conv1(x), 0.05)  # (?, 64, 112, 112)
+        out = F.leaky_relu(self.conv1_2(out), 0.05)  # (?, 64, 112, 112)
+        out = F.leaky_relu(self.conv2(out), 0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.conv2_2(out), 0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.conv3(out), 0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.conv3_2(out), 0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.conv4(out), 0.05)  # (?, 128, 14, 14)
+        out = F.leaky_relu(self.conv4_2(out), 0.05)  # (?, 128, 14, 14)
+        out = F.leaky_relu(self.conv5(out), 0.05)  # (?, 64, 7 , 7)
+        out = F.leaky_relu(self.conv5_2(out), 0.05)  # (?, 64, 7 , 7)
+        out = F.leaky_relu(self.conv5_3(out), 0.05)  # (?, 3, 5 , 5)
+        return out
+
+
 class Decoder(nn.Module):
     def __init__(self, conv_dim=64):
         super(Decoder, self).__init__()

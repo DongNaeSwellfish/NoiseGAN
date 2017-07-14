@@ -11,7 +11,8 @@ def main():
     testloader = get_loader('test', test_transform)
     trainer = Trainer(trainloader, testloader)
     trainer.train_classifier()
-    trainer.train_adversarial()
+    trainer.train_conv_mask()
+    # trainer.train_adversarial()
 
 if __name__ == "__main__":
     main()
