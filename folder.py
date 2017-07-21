@@ -15,6 +15,14 @@ def is_image_file(filename):
 
 
 def find_classes(dir):
+    # f = open('/home/mipal/NoiseGAN/map_nofilename.txt', 'r')
+    # cls = []
+    # for line in f:
+    #     line = line.split()
+    #     if line:
+    #         line = [int(i) for i in line]
+    #         cls.append(line)
+    # return cls
     classes = [d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir, d))]
     classes.sort()
     class_to_idx = {classes[i]: i for i in range(len(classes))}
@@ -23,8 +31,15 @@ def find_classes(dir):
 
 def find_classes_val(clsdir):
     f = open(clsdir, 'r')
-    content = [x.strip('\n') for x in f.readlines()]
-    return content
+    cls = []
+    for line in f:
+        line = line.split()
+        if line:
+            line = [int(i) for i in line]
+            cls.append(line)
+    return cls
+    #content = [x.strip('\n') for x in f.readlines()]
+    #return int(content)
 
 
 def make_dataset(dir, class_to_idx):
@@ -41,15 +56,15 @@ def make_dataset(dir, class_to_idx):
                     path = os.path.join(root, fname)
                     item = (path, class_to_idx[target])
                     images.append(item)
-
     return images
 
 
 def make_dataset_val(dir, classes):
     images = []
     dir = os.path.expanduser(dir)
-    for root, _, fnames in os.walk(dir):  # sorted(os.walk(d)):
-        for i, fname in enumerate(fnames):
+    for root, _, fnames in os.walk(dir):
+        a = sorted(fnames)
+        for i, fname in enumerate(a):
             if is_image_file(fname):
                 path = os.path.join(root, fname)
                 item = (path, classes[i])
@@ -108,16 +123,15 @@ class ImageFolder_Val(data.Dataset):
 
     def __init__(self, clsdir, root, transform=None, target_transform=None,
                  loader=default_loader):
-        classes = find_classes_val(clsdir)
-        imgs = make_dataset_val(root, classes)
+        class_to_idx = find_classes_val(clsdir)
+        imgs = make_dataset_val(root, class_to_idx)
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
 
         self.root = root
         self.imgs = imgs
-        self.classes = classes
-        self.class_to_idx = classes
+        self.class_to_idx = class_to_idx
         self.transform = transform
         self.target_transform = target_transform
         self.loader = loader
@@ -173,8 +187,9 @@ class ImageFolder_Train(data.Dataset):
         classes, class_to_idx = find_classes(root)
         imgs = make_dataset(root, class_to_idx)
         if len(imgs) == 0:
-            raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
-                               "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
+            raise (RuntimeError("Found 0 images in subfolders of: " + root + "\n"
+                                                                             "Supported image extensions are: " + ",".join(
+                IMG_EXTENSIONS)))
 
         self.root = root
         self.imgs = imgs
