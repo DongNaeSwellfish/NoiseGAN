@@ -25,9 +25,10 @@ class Trainer(object):
         self.finetune(allow=True)
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
-        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.001)
+        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.0005)
         self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.001)
-        self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.0005)
+        self.optim_G = optim.Adam(self.decoder.parameters(), lr = 0.001)
+        self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.001)
         self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.001)
 
         self.criterion_C = nn.CrossEntropyLoss()
@@ -39,12 +40,15 @@ class Trainer(object):
         self.real_label = 1
         self.fake_label = 0
 
+        self.l1_param = 0.001
+
         if torch.cuda.is_available():
             self.encoder.cuda()
             self.decoder.cuda()
             self.discriminator.cuda()
             self.cnn.cuda()
             self.cnn.fc.cuda()
+
 
     # if allow = True, classifier resnet50 computes grad
     def finetune(self, allow=True):
@@ -110,7 +114,7 @@ class Trainer(object):
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(200):
+        for epoch in range(20):
             self.discriminator.train()
             self.decoder.train()
             for i, images in enumerate(self.train_loader):
@@ -133,24 +137,36 @@ class Trainer(object):
 
                 # Train discriminator with real image
                 mask = self.decoder(self.encoder(images_resized))
+
+                # combined image
+                image_result = images_resized.detach() + mask #- (images_resized.detach())*mask
+
                 # mask = mask * 0.5  # mask *= 0.01 is inplace operation(cannot compute gradient)
+
+                #loss real
                 logit_real = self.discriminator(images_resized.detach())
                 loss_real_real = self.criterion_D(logit_real, labels_real)
-                loss_real_real.backward()
+                logit_fake = self.discriminator(image_result)
+                loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
+
+                #backward the discriminator
+                loss_discriminator = loss_real_real + loss_fake_fake
+                loss_discriminator.backward(retain_variables=True)
                 clip_gradient(self.optim_D, 0.5)
                 self.optim_D.step()
 
-                self.discriminator.zero_grad()
-                self.decoder.zero_grad()
+                #self.discriminator.zero_grad()
+                #self.decoder.zero_grad()
+
 
                 # Train discriminator with fake image
-                logit_fake = self.discriminator(images_resized.detach()+mask)
-                loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
-                loss_fake_fake.backward(retain_variables=True)
+                #logit_fake = self.discriminator(image_result)
+                #loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
+                #loss_fake_fake.backward(retain_variables=True)
 
-                # if (i % 2) == 0:
-                clip_gradient(self.optim_D, 0.5)
-                self.optim_D.step()
+                ## if (i % 2) == 0:
+                #clip_gradient(self.optim_D, 0.5)
+                #self.optim_D.step()
 
                 ######################################################
                 #                  train Generator                   #
@@ -158,49 +174,86 @@ class Trainer(object):
                 self.discriminator.zero_grad()
                 self.decoder.zero_grad()
                 self.cnn.fc.zero_grad()
-                logit_fake = self.discriminator(images_resized.detach() + mask)
-                loss_fake_real = self.criterion_D(logit_fake, labels_real)
-                loss_fake_real.backward()  # (retain_variables=True)
-                clip_gradient(self.optim_G_dis, 0.5)
-                self.optim_G_dis.step()
 
-                self.discriminator.zero_grad()
-                self.decoder.zero_grad()
-                self.cnn.fc.zero_grad()
-                mask = self.decoder(self.encoder(images_resized))
+                #generator loss
+                logit_fake = self.discriminator(image_result)
+                loss_fake_real = self.criterion_D(logit_fake, labels_real)
+
+                #l1 regularization
                 image_l1 = mask + images_resized
                 loss_l1 = self.criterion_L1(image_l1, images_resized)
-                loss_l1 = loss_l1 * 500
-                loss_l1.backward()
-                self.optim_L1.step()
+                #loss_l1_v = torch.nn.functional.relu(loss_l1 - self.l1_param) \
+                #            + torch.nn.functional.relu(self.l1_param - loss_l1)
 
-                self.discriminator.zero_grad()
-                self.decoder.zero_grad()
-                self.cnn.fc.zero_grad()
-
-                # Train generator with fake image with classifier (resnet50)
-                mask = self.decoder(self.encoder(images_resized))
-                # mask = mask * 0.5
-                cnn_out = self.cnn(images_resized.detach()+mask)
+                #adversarial classification
+                cnn_out = self.cnn(image_result)
                 cnn_out = func.softmax(cnn_out)
-
                 label_target = Variable(torch.zeros((self.batch_size, 1))).cuda()
-                # MSE loss with uniform distribution of 0.5
                 one_mask = Variable(torch.zeros(self.batch_size, 10)).cuda()
                 for index in range(self.batch_size):
                     one_mask[index, image_class[index]] = 1
+
                 cnn_out_truth = one_mask.detach() * cnn_out
                 cnn_out_truth = torch.sum(cnn_out_truth, dim=1)
                 loss_cls = self.criterion_G_CNN(cnn_out_truth, label_target.detach())
-                loss_cls.backward()
-                clip_gradient(self.optim_G_cls, 0.5)
-                self.optim_G_cls.step()
 
-                if (i % 10) == 0:
-                    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
-                          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f'
-                          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0],
-                             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0]))
+                #accumulated error
+                #loss_generator = sum(loss_fake_real, loss_l1, loss_cls)
+
+
+                #backward the generator
+                loss_generator = loss_fake_real + 100*loss_l1 + loss_cls #initially we set weights as 1
+                loss_generator.backward()
+                clip_gradient(self.optim_G, 0.5)
+                self.optim_G_dis.step()
+
+
+                #self.discriminator.zero_grad()
+                #self.decoder.zero_grad()
+                #self.cnn.fc.zero_grad()
+                #logit_fake = self.discriminator(images_resized.detach() + mask)
+                #loss_fake_real = self.criterion_D(logit_fake, labels_real)
+                #loss_fake_real.backward()  # (retain_variables=True)
+                #clip_gradient(self.optim_G_dis, 0.5)
+                #self.optim_G_dis.step()
+
+                #self.discriminator.zero_grad()
+                #self.decoder.zero_grad()
+                #self.cnn.fc.zero_grad()
+                #mask = self.decoder(self.encoder(images_resized))
+                #image_l1 = mask + images_resized
+                #loss_l1 = self.criterion_L1(image_l1, images_resized)
+                #loss_l1 = loss_l1 * 500
+                #loss_l1.backward()
+                #self.optim_L1.step()
+
+                #self.discriminator.zero_grad()
+                #self.decoder.zero_grad()
+                #self.cnn.fc.zero_grad()
+
+                ## Train generator with fake image with classifier (resnet50)
+                #mask = self.decoder(self.encoder(images_resized))
+                # mask = mask * 0.5
+                #cnn_out = self.cnn(images_resized.detach()+mask)
+                #cnn_out = func.softmax(cnn_out)
+
+                #label_target = Variable(torch.zeros((self.batch_size, 1))).cuda()
+                ## MSE loss with uniform distribution of 0.5
+                #one_mask = Variable(torch.zeros(self.batch_size, 10)).cuda()
+                #for index in range(self.batch_size):
+                #    one_mask[index, image_class[index]] = 1
+                #cnn_out_truth = one_mask.detach() * cnn_out
+                #cnn_out_truth = torch.sum(cnn_out_truth, dim=1)
+                #loss_cls = self.criterion_G_CNN(cnn_out_truth, label_target.detach())
+                #loss_cls.backward()
+                #clip_gradient(self.optim_G_cls, 0.5)
+                #self.optim_G_cls.step()
+
+                #if (i % 10 and i<250) == 0:
+                #    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
+                #          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f'
+                #          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0],
+                #             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0]))
 
                 # Test the Model
                 if (i % 249 == 0) and (i != 0):
@@ -216,7 +269,7 @@ class Trainer(object):
                         for index in range(self.batch_size):
                             label_mask[index, la[index]] = 1
                         mask_test = self.decoder(self.encoder(img_test_resized))
-                        reconst_images = img_test_resized + mask_test
+                        reconst_images = img_test_resized + mask_test #- img_test_resized*mask_test
                         outputs = self.cnn(reconst_images)
 
                         _, predicted = torch.max(outputs.data, 1)
