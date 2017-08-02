@@ -45,7 +45,7 @@ class ConvMaskGenerator(nn.Module):
         out = F.leaky_relu(self.conv4_2(out), 0.05)  # (?, 128, 14, 14)
         out = F.leaky_relu(self.conv5(out), 0.05)  # (?, 64, 7 , 7)
         out = F.leaky_relu(self.conv5_2(out), 0.05)  # (?, 64, 7 , 7)
-        out = F.leaky_relu(self.conv5_3(out), 0.05)  # (?, 3, 5 , 5)
+        out = F.leaky_relu(self.conv5_3(out), 0.05)  # (?, 3, 7 , 7)
         return out
 
 
