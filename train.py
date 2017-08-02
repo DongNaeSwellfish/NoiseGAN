@@ -8,8 +8,9 @@ from model import Encoder, Decoder, ConvMaskGenerator
 import torchvision.models as models
 import torch.nn.functional as func
 from logger import Logger
-
+import os
 logger = Logger('./logs')
+
 
 class Trainer(object):
     def __init__(self, trainloader, testloader):
@@ -26,6 +27,7 @@ class Trainer(object):
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
         self.conv_gen = ConvMaskGenerator(conv_dim=64).cuda()
         self.finetune(allow=True)
+        self.pre_cnn_path = os.path.join('/home', 'david', 'NoiseGAN', 'data', 'best-pre_resnet.pth')
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
         self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.001)
@@ -62,13 +64,15 @@ class Trainer(object):
 
     # Train the fully-connected layer of resnet50 with STL10 dataset
     def train_classifier(self):
+        best_score=0
         def clip_gradient(optimizer, grad_clip):
             for group in optimizer.param_groups:
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(1):
+        for epoch in range(10):
             for i, images in enumerate(self.train_loader):
+                i += 1
                 self.cnn.fc.zero_grad()
                 images_label = Variable(images[1]).long().cuda()
                 images = images[0].float().cuda()
@@ -88,7 +92,7 @@ class Trainer(object):
                         epoch + 1, i, total_step, loss_fc.data[0]))
 
                 # evaluation with test dataset (800 per class)
-                if (i % 249 == 0) and (i != 0):
+                if (i % len(self.train_loader) == 0) and (i != 0):
                     correct = 0
                     total = 0
                     correct_meanscore = 0
@@ -107,12 +111,18 @@ class Trainer(object):
                         correct_meanscore += c
                         total += la.size(0)
                         correct += (predicted.cpu() == la).sum()
-                    correct_meanscore /= 400  # 200 = number of iteration in one test epoch
+                    correct_meanscore /= 80  # 200 = number of iteration in one test epoch
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
+                    if correct_meanscore.data[0] > best_score:
+                        best_score = correct_meanscore.data[0]
+                        print("saving best model...")
+                        torch.save(self.cnn.state_dict(), './data/best-pre_resnet.pth')
 
     def train_adversarial(self):
         best_score = 0
+        self.cnn.load_state_dict(torch.load(self.pre_cnn_path))
+        print('load pretrained model from %s' % self.pre_cnn_path)
 
         def clip_gradient(optimizer, grad_clip):
             for group in optimizer.param_groups:
@@ -181,8 +191,11 @@ class Trainer(object):
 
                 # adversarial classification
                 cnn_out = self.cnn(image_result)
+                label_target = Variable(torch.zeros((self.batch_size))).cuda().long()
+                # loss_cls = self.criterion_G_CNN(cnn_out, label_target.detach())
                 loss_cls = self.criterion_G_CNN(cnn_out, image_class.detach())
                 # cnn_out = func.softmax(cnn_out)
+
                 # label_target = Variable(torch.zeros((self.batch_size, 1))).cuda()
                 # one_mask = Variable(torch.zeros(self.batch_size, 10)).cuda()
                 # for index in range(self.batch_size):
@@ -197,10 +210,10 @@ class Trainer(object):
 
 
                 # backward the generator
-                if epoch < 0:
-                    loss_generator = loss_fake_real + loss_cls + 100 * loss_l1  # initially we set weights as 1
-                else:
-                    loss_generator = loss_fake_real + loss_cls
+                # if epoch < 0:
+                loss_generator = loss_fake_real + loss_cls + 100 * loss_l1  # initially we set weights as 1
+                # else:
+                #     loss_generator = loss_fake_real + loss_cls
                 loss_generator.backward()
                 clip_gradient(self.optim_G_dis, 0.5)
                 self.optim_G_dis.step()
