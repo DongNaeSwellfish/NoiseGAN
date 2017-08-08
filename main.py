@@ -10,7 +10,7 @@ def main():
     trainloader = get_loader('train', train_transform)
     testloader = get_loader('test', test_transform)
     trainer = Trainer(trainloader, testloader)
-    trainer.train_classifier()
+    # trainer.train_classifier()
     trainer.train_adversarial()
     # trainer.train_conv_mask()
     # Eval.eval()

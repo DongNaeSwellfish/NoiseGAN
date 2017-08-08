@@ -22,7 +22,7 @@ class Trainer(object):
 
         self.encoder = Encoder().cuda()
         self.decoder = Decoder(conv_dim=64).cuda()
-        self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
+        # self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
         self.discriminator_cls = Discriminator_cls(image_size=224, conv_dim=128).cuda()
         self.cnn = models.resnet50(pretrained=True)
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
@@ -35,7 +35,8 @@ class Trainer(object):
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
         self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.001)
         self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.001)
-        self.optim_D = optim.Adam(list(self.discriminator.parameters()) + list(self.discriminator_cls.parameters()), lr=0.0005)
+        # self.optim_D = optim.Adam(list(self.discriminator.parameters()) + list(self.discriminator_cls.parameters()), lr=0.0005)
+        self.optim_D = optim.Adam(self.discriminator_cls.parameters(), lr=0.0005)
         self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.001)
         # self.optim_D_cls = optim.Adam(self.discriminator_cls.parameters(), lr=0.0005)
         # self.optim_G_dis_conv = optim.Adam(self.conv_gen.parameters(), lr=0.001)
@@ -54,7 +55,7 @@ class Trainer(object):
         if torch.cuda.is_available():
             self.encoder.cuda()
             self.decoder.cuda()
-            self.discriminator.cuda()
+            # self.discriminator.cuda()
             self.cnn.cuda()
             self.cnn.fc.cuda()
 
@@ -132,13 +133,13 @@ class Trainer(object):
 
         total_step = len(self.train_loader)
         for epoch in range(200):
-            self.discriminator.train()
+            # self.discriminator.train()
             self.decoder.train()
             for i, images in enumerate(self.train_loader):
                 ######################################################
                 #                train Discriminator                 #
                 ######################################################
-                self.discriminator.zero_grad()
+                # self.discriminator.zero_grad()
                 self.discriminator_cls.zero_grad()
                 self.decoder.zero_grad()
                 self.cnn.zero_grad()
@@ -168,15 +169,16 @@ class Trainer(object):
                 # mask = mask * 0.5  # mask *= 0.01 is inplace operation(cannot compute gradient)
 
                 # loss real
-                logit_real = self.discriminator(images_resized.detach())
-                loss_real_real = self.criterion_D(logit_real, labels_real)
-                logit_fake = self.discriminator(image_result)
-                loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
+                # logit_real = self.discriminator(images_resized.detach())
+                # loss_real_real = self.criterion_D(logit_real, labels_real)
+                # logit_fake = self.discriminator(image_result)
+                # loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
                 logit_cls0_real = self.discriminator_cls(images_resized.detach())
                 loss_cls0_real = self.criterion_D_cls(logit_cls0_real, cls0_mask)
 
                 # backward the discriminator
-                loss_discriminator = loss_real_real + loss_fake_fake + loss_cls0_real
+                # loss_discriminator = loss_real_real + loss_fake_fake + loss_cls0_real
+                loss_discriminator = loss_cls0_real
                 loss_discriminator.backward()
                 clip_gradient(self.optim_D, 0.5)
                 self.optim_D.step()
@@ -184,15 +186,15 @@ class Trainer(object):
                 ######################################################
                 #                  train Generator                   #
                 ######################################################
-                self.discriminator.zero_grad()
+                # self.discriminator.zero_grad()
                 self.discriminator_cls.zero_grad()
                 self.decoder.zero_grad()
                 self.cnn.zero_grad()
                 mask = self.decoder(self.encoder(images_resized))
                 image_result = images_resized.detach() + mask
                 # generator loss
-                logit_fake = self.discriminator(image_result)
-                loss_fake_real = self.criterion_D(logit_fake, labels_real)
+                # logit_fake = self.discriminator(image_result)
+                # loss_fake_real = self.criterion_D(logit_fake, labels_real)
 
                 # l1 regularization
                 loss_l1 = self.criterion_L1(image_result, images_resized)
@@ -223,18 +225,22 @@ class Trainer(object):
 
                 # backward the generator
                 # if epoch < 0:
-                loss_generator = loss_fake_real + loss_cls + loss_cls0_fake + 500 * loss_l1  # initially we set weights as 1
+                # loss_generator = loss_fake_real + loss_cls + loss_cls0_fake + 500 * loss_l1  # initially we set weights as 1
+                loss_generator = loss_cls + loss_cls0_fake + 100 * loss_l1
                 # else:
                 #     loss_generator = loss_fake_real + loss_cls
                 loss_generator.backward()
                 clip_gradient(self.optim_G_dis, 0.5)
                 self.optim_G_dis.step()
 
+                # if (i % 10) == 0:
+                #     print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
+                #           ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f, loss_cls0_real: %.4f, loss_cls0_fake: %.4f'
+                #           % (epoch + 1, epoch, i, total_step, loss_fake_real.data[0], loss_real_real.data[0],
+                #              loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0], loss_cls0_real.data[0], loss_cls0_fake.data[0]))
                 if (i % 10) == 0:
-                    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
-                          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f, loss_cls0_real: %.4f, loss_cls0_fake: %.4f'
-                          % (epoch + 1, epoch, i, total_step, loss_fake_real.data[0], loss_real_real.data[0],
-                             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0], loss_cls0_real.data[0], loss_cls0_fake.data[0]))
+                    print('Epoch [%d/%d], Step[%d/%d], cls_loss: %.4f, l1_loss: %.4f, loss_cls0_real: %.4f, loss_cls0_fake: %.4f'
+                          % (epoch + 1, epoch, i, total_step, loss_cls.data[0], loss_l1.data[0], loss_cls0_real.data[0], loss_cls0_fake.data[0]))
                 # # tensorboard_Scalar_logger
                 # info = {
                 #     'loss_fake_real': loss_fake_real.data[0],
@@ -246,7 +252,7 @@ class Trainer(object):
 
                 # Test the Model
                 if (i % len(self.train_loader) == 0) and (i != 0):
-                    print logit_cls0_fake, logit_cls0_real
+                    # print logit_cls0_fake, logit_cls0_real
                     correct = 0
                     total = 0
                     correct_meanscore = 0
@@ -278,13 +284,14 @@ class Trainer(object):
                             torchvision.utils.save_image(reconst_images.data.cpu(),
                                                          './data/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
                     correct_meanscore /= 400
+                    print predicted
                     print('Test Accuracy of the model on the test images for class 0 : %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
                     if correct_meanscore.data[0] > best_score:
                         best_score = correct_meanscore.data[0]
                         print("saving best model...")
                         torch.save(self.decoder.state_dict(), './data/best-generator.pth')
-                        torch.save(self.discriminator.state_dict(), './data/best-discriminator.pth')
+                        # torch.save(self.discriminator.state_dict(), './data/best-discriminator.pth')
                         torch.save(self.optim_G_dis.state_dict(), './data/best-optimizer.pth')
 
                 if (i % len(self.train_loader) == 0) and (i != 0):
