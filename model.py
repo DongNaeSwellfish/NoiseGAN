@@ -64,7 +64,7 @@ class Decoder(nn.Module):
         self.deconv4 = deconv(conv_dim * 2, conv_dim, 4)
         self.deconv4_1 = deconv(conv_dim, conv_dim, 3, stride=1)
         self.deconv4_2 = deconv(conv_dim, conv_dim, 3, stride=1)
-        self.deconv5 = deconv(conv_dim, 3, 4, bn=False)
+        self.deconv5 = deconv(conv_dim, 1, 4, bn=False)
 
     def forward(self, x):
         out = F.leaky_relu(self.deconv1(x.detach()), 0.05)  # (?, 1024, 14, 14)

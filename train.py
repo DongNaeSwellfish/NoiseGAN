@@ -15,7 +15,7 @@ logger = Logger('./logs')
 class Trainer(object):
     def __init__(self, trainloader, testloader):
         self.num_gpu = 1
-        self.batch_size = 20
+        self.batch_size = 40
 
         self.train_loader = trainloader
         self.test_loader = testloader
@@ -33,11 +33,11 @@ class Trainer(object):
         self.finetune(allow=True)
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
-        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.001)
-        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.001)
+        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.002)
+        self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.002)
         # self.optim_D = optim.Adam(list(self.discriminator.parameters()) + list(self.discriminator_cls.parameters()), lr=0.0005)
-        self.optim_D = optim.Adam(self.discriminator_cls.parameters(), lr=0.0005)
-        self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.001)
+        self.optim_D = optim.Adam(self.discriminator_cls.parameters(), lr=0.002)
+        self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.002)
         # self.optim_D_cls = optim.Adam(self.discriminator_cls.parameters(), lr=0.0005)
         # self.optim_G_dis_conv = optim.Adam(self.conv_gen.parameters(), lr=0.001)
         # self.optim_G_cls_conv = optim.Adam(self.conv_gen.parameters(), lr=0.001)
@@ -51,6 +51,7 @@ class Trainer(object):
         self.criterion_D_cls = nn.CrossEntropyLoss()
         self.real_label = 1
         self.fake_label = 0
+        self.cls = 0
 
         if torch.cuda.is_available():
             self.encoder.cuda()
@@ -132,7 +133,7 @@ class Trainer(object):
                     param.grad.data.clamp_(-grad_clip, grad_clip)
 
         total_step = len(self.train_loader)
-        for epoch in range(200):
+        for epoch in range(500):
             # self.discriminator.train()
             self.decoder.train()
             for i, images in enumerate(self.train_loader):
@@ -151,7 +152,7 @@ class Trainer(object):
                 image_class = Variable(images[1].cuda())
                 cls0_mask = Variable(torch.zeros(self.batch_size)).cuda().long()
                 for index in range(self.batch_size):
-                    if image_class.data[index] == 0:
+                    if image_class.data[index] == self.cls:
                         cls0_mask[index] = 1
 
                 images = images[0].cuda()
@@ -203,7 +204,7 @@ class Trainer(object):
 
                 # adversarial classification
                 cnn_out = self.cnn(image_result)
-                label_target = Variable(torch.zeros((self.batch_size))).cuda().long()
+                label_target = Variable(self.cls*torch.ones((self.batch_size))).cuda().long()
                 loss_cls = self.criterion_G_CNN(cnn_out, label_target.detach())
                 logit_cls0_fake = self.discriminator_cls(image_result.detach())
                 loss_cls0_fake = self.criterion_D_cls(logit_cls0_fake, labels_real)
@@ -226,7 +227,7 @@ class Trainer(object):
                 # backward the generator
                 # if epoch < 0:
                 # loss_generator = loss_fake_real + loss_cls + loss_cls0_fake + 500 * loss_l1  # initially we set weights as 1
-                loss_generator = loss_cls + loss_cls0_fake + 100 * loss_l1
+                loss_generator = loss_cls + loss_cls0_fake + 500 * loss_l1
                 # else:
                 #     loss_generator = loss_fake_real + loss_cls
                 loss_generator.backward()
@@ -238,7 +239,7 @@ class Trainer(object):
                 #           ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f, loss_cls0_real: %.4f, loss_cls0_fake: %.4f'
                 #           % (epoch + 1, epoch, i, total_step, loss_fake_real.data[0], loss_real_real.data[0],
                 #              loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0], loss_cls0_real.data[0], loss_cls0_fake.data[0]))
-                if (i % 10) == 0:
+                if (i % 50) == 0:
                     print('Epoch [%d/%d], Step[%d/%d], cls_loss: %.4f, l1_loss: %.4f, loss_cls0_real: %.4f, loss_cls0_fake: %.4f'
                           % (epoch + 1, epoch, i, total_step, loss_cls.data[0], loss_l1.data[0], loss_cls0_real.data[0], loss_cls0_fake.data[0]))
                 # # tensorboard_Scalar_logger
@@ -251,7 +252,7 @@ class Trainer(object):
                 #     logger.scalar_summary(tag, value, i + 250 * epoch)
 
                 # Test the Model
-                if (i % len(self.train_loader) == 0) and (i != 0):
+                if (i % len(self.train_loader) == 0) and (i != 0) and (epoch % 5 == 0):
                     # print logit_cls0_fake, logit_cls0_real
                     correct = 0
                     total = 0
@@ -261,10 +262,10 @@ class Trainer(object):
                         j += 1
                         im_test = Variable(im, volatile=True).cuda()
                         img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
-                        label_target = torch.zeros(la.size(0)).long()
+                        label_target = self.cls*torch.ones(la.size(0)).long()
                         label_mask = Variable(torch.zeros(la.size(0), 10), volatile=True).cuda()
                         for index in range(la.size(0)):
-                            label_mask[index, 0] = 1
+                            label_mask[index, self.cls] = 1
                         mask_test = self.decoder(self.encoder(img_test_resized))
                         reconst_images = img_test_resized + mask_test
                         outputs = self.cnn(reconst_images)
@@ -272,6 +273,7 @@ class Trainer(object):
                         _, predicted = torch.max(outputs.data, 1)
                         a = func.softmax(outputs)
                         b = a * label_mask
+
                         c = torch.sum(b) / self.batch_size
                         correct_meanscore += c
                         total += la.size(0)
@@ -283,7 +285,7 @@ class Trainer(object):
                                                          './data/epoch%dnoise_%d.jpg' % (epoch + 1, j))
                             torchvision.utils.save_image(reconst_images.data.cpu(),
                                                          './data/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
-                    correct_meanscore /= 400
+                    correct_meanscore /= 200
                     print predicted
                     print('Test Accuracy of the model on the test images for class 0 : %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
@@ -291,33 +293,33 @@ class Trainer(object):
                         best_score = correct_meanscore.data[0]
                         print("saving best model...")
                         torch.save(self.decoder.state_dict(), './data/best-generator.pth')
-                        # torch.save(self.discriminator.state_dict(), './data/best-discriminator.pth')
+                        torch.save(self.discriminator_cls.state_dict(), './data/best-discriminator.pth')
                         torch.save(self.optim_G_dis.state_dict(), './data/best-optimizer.pth')
 
-                if (i % len(self.train_loader) == 0) and (i != 0):
-                    correct = 0
-                    total = 0
-                    correct_meanscore = 0
-                    for im, la in self.test_loader:
-                        # volatile means this Variable requires no grad computation
-                        im_test = Variable(im, volatile=True).cuda()
-                        label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
-                        for index in range(self.batch_size):
-                            label_mask[index, la[index]] = 1
-                        img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
-                        mask_test = self.decoder(self.encoder(img_test_resized))
-                        reconst_images = img_test_resized + mask_test
-                        outputs = self.cnn(reconst_images)
-                        _, predicted = torch.max(outputs.data, 1)
-                        a = func.softmax(outputs)
-                        b = a * label_mask
-                        c = torch.sum(b) / self.batch_size
-                        correct_meanscore += c
-                        total += la.size(0)
-                        correct += (predicted.cpu() == la).sum()
-                    correct_meanscore /= 400  # 200 = number of iteration in one test epoch
-                    print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
-                    print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
+                # if (i % len(self.train_loader) == 0) and (i != 0):
+                #     correct = 0
+                #     total = 0
+                #     correct_meanscore = 0
+                #     for im, la in self.test_loader:
+                #         # volatile means this Variable requires no grad computation
+                #         im_test = Variable(im, volatile=True).cuda()
+                #         label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
+                #         for index in range(self.batch_size):
+                #             label_mask[index, la[index]] = 1
+                #         img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
+                #         mask_test = self.decoder(self.encoder(img_test_resized))
+                #         reconst_images = img_test_resized + mask_test
+                #         outputs = self.cnn(reconst_images)
+                #         _, predicted = torch.max(outputs.data, 1)
+                #         a = func.softmax(outputs)
+                #         b = a * label_mask
+                #         c = torch.sum(b) / self.batch_size
+                #         correct_meanscore += c
+                #         total += la.size(0)
+                #         correct += (predicted.cpu() == la).sum()
+                #     correct_meanscore /= 400  # 200 = number of iteration in one test epoch
+                #     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
+                #     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
     # def train_conv_mask(self):
     #     def clip_gradient(optimizer, grad_clip):
     #         for group in optimizer.param_groups:
