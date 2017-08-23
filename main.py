@@ -12,6 +12,7 @@ def main():
     trainer = Trainer(trainloader, testloader)
     # trainer.train_classifier()
     trainer.train_adversarial()
+    # trainer.evaluation()
     # trainer.train_conv_mask()
     # Eval.eval()
 
