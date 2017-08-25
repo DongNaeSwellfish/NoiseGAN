@@ -63,7 +63,7 @@ class Unet_Generator(nn.Module):
         out = F.leaky_relu(self.deconv3_1(out), 0.05)                      # (?, 128, 56, 56)
         out = F.leaky_relu(self.deconv4(torch.cat((out, res2), 1)), 0.05)  # (?, 64, 112, 112)
         out = F.leaky_relu(self.deconv4_1(out), 0.05)                      # (?, 64, 112, 112)
-        out = F.tanh(self.deconv5(torch.cat((out, res1), 1)))              # (?, 3, 224, 224)
+        out = self.deconv5(torch.cat((out, res1), 1))                      # (?, 3, 224, 224)
         return out
 
 

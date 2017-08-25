@@ -34,7 +34,7 @@ class Trainer(object):
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
         self.optim_G_dis = optim.Adam(self.unet.parameters(), lr=0.002)
-        self.optim_D = optim.Adam(self.discriminator_cls.parameters(), lr=0.001)
+        self.optim_D = optim.Adam(self.discriminator_cls.parameters(), lr=0.0002)
         self.optim_L1 = optim.Adam(self.unet.parameters(), lr=0.002)
 
         self.criterion_C = nn.CrossEntropyLoss()
@@ -169,7 +169,7 @@ class Trainer(object):
                 self.unet.zero_grad()
                 self.cnn.zero_grad()
                 _, res1, res2, res3, res4 = self.discriminator_cls(images_resized.detach())
-                mask = self.unet(images_resized, res1, res2, res3, res4)
+                mask = self.unet(images_resized, res1.detach(), res2.detach(), res3.detach(), res4.detach())
                 image_result = images_resized.detach() + mask
 
                 # loss_l1 = self.criterion_L1(image_result, images_resized)
@@ -179,6 +179,7 @@ class Trainer(object):
 
                 loss_generator = loss_cls0_fake  # + 10 * loss_l1
                 loss_generator.backward()
+                # clip_gradient(self.optim_G_dis, 0.5)
                 self.optim_G_dis.step()
 
                 # if (i % 25) == 0:
@@ -210,7 +211,7 @@ class Trainer(object):
                         label_mask = Variable(torch.zeros(la.size(0), 10), volatile=True).cuda()
                         for index in range(la.size(0)):
                             label_mask[index, self.cls] = 1
-                        _, res1_test, res2_test, res3_test, res4_test = self.discriminator_cls(images_resized.detach())
+                        _, res1_test, res2_test, res3_test, res4_test = self.discriminator_cls(img_test_resized.detach())
                         mask_test = self.unet(img_test_resized, res1_test, res2_test, res3_test, res4_test)
                         reconst_images = img_test_resized + mask_test
                         outputs = self.cnn(reconst_images)
