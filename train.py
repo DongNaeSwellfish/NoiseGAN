@@ -30,12 +30,16 @@ class Trainer(object):
         self.cnn = models.resnet101(pretrained=True)
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
 
+        self.pre_cnn_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet101.pth')
+        self.cnn.load_state_dict(torch.load(self.pre_cnn_path))
+        print('load pretrained model from %s' % self.pre_cnn_path)
+
         self.cnn_2 = models.resnet50(pretrained=True)
         self.cnn_2.fc = nn.Linear(self.cnn_2.fc.in_features, 10)
         #
-        self.pre_cnn_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet50.pth')
-        self.cnn_2.load_state_dict(torch.load(self.pre_cnn_path))
-        print('load pretrained model from %s' % self.pre_cnn_path)
+        self.pre_cnn_2_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet50.pth')
+        self.cnn_2.load_state_dict(torch.load(self.pre_cnn_2_path))
+        print('load pretrained model from %s' % self.pre_cnn_2_path)
 
 
 
@@ -162,7 +166,6 @@ class Trainer(object):
 
                 self.decoder.zero_grad()
                 self.discriminator.zero_grad()
-
                 # Train discriminator with real image
                 mask = self.decoder(self.encoder(images_resized))
 
@@ -211,27 +214,27 @@ class Trainer(object):
                 loss_fake_real = self.criterion_D(logit_fake, labels_real)
 
                 #style loss
-                feat_1 = disc[1]
+                feat_1 = disc[1].detach()
                 feat_1 = feat_1.view([self.batch_size,128, 12544])
                 gram_1 = torch.matmul(feat_1, torch.transpose(feat_1,1,2))
 
-                feat_2 = disc[2]
+                feat_2 = disc[2].detach()
                 feat_2 = feat_2.view([self.batch_size, 256, 3136])
                 gram_2 = torch.matmul(feat_2, torch.transpose(feat_2, 1, 2))
 
-                feat_3 = self.discriminator(image_result)[3]
+                feat_3 = disc[3].detach()
                 feat_3 = feat_3.view([self.batch_size, 512, 784])
                 gram_3 = torch.matmul(feat_3, torch.transpose(feat_3, 1, 2))
 
-                feat_1_gt = disc_gt[1]
+                feat_1_gt = disc_gt[1].detach()
                 feat_1_gt = feat_1_gt.view([self.batch_size, 128, 12544])
                 gram_1_gt = torch.matmul(feat_1_gt, torch.transpose(feat_1_gt, 1, 2))
 
-                feat_2_gt = disc_gt[2]
+                feat_2_gt = disc_gt[2].detach()
                 feat_2_gt = feat_2_gt.view([self.batch_size, 256, 3136])
                 gram_2_gt = torch.matmul(feat_2_gt, torch.transpose(feat_2_gt, 1, 2))
 
-                feat_3_gt = self.discriminator(images_resized.detach())[3]
+                feat_3_gt = disc_gt[3].detach()
                 feat_3_gt = feat_3_gt.view([self.batch_size, 512, 784])
                 gram_3_gt = torch.matmul(feat_3_gt, torch.transpose(feat_3_gt, 1, 2))
 

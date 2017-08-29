@@ -13,7 +13,7 @@ def main():
     testloader = get_loader('test', test_transform)
     trainer = Trainer(trainloader, testloader)
 
-    trainer.train_classifier()
+    #trainer.train_classifier()
     trainer.train_adversarial()
     trainer.evaluation()
     eval.eval()
