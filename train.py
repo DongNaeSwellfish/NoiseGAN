@@ -33,7 +33,7 @@ class Trainer(object):
         self.finetune(allow=True)
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
-        self.optim_G_dis = optim.Adam(self.unet.parameters(), lr=0.002)
+        self.optim_G_dis = optim.Adam(self.unet.parameters(), lr=0.0005)
         self.optim_D = optim.Adam(self.discriminator_cls.parameters(), lr=0.0002)
         self.optim_L1 = optim.Adam(self.unet.parameters(), lr=0.002)
 
@@ -45,7 +45,7 @@ class Trainer(object):
         self.criterion_D_cls = nn.CrossEntropyLoss()
         self.real_label = 1
         self.fake_label = 0
-        self.cls = 0
+        self.cls = 1
 
         if torch.cuda.is_available():
             self.unet.cuda()
