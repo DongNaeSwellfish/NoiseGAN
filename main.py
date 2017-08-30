@@ -16,7 +16,7 @@ def main():
     #trainer.train_classifier()
     trainer.train_adversarial()
     trainer.evaluation()
-    eval.eval()
+    #eval.eval()
 
 if __name__ == "__main__":
     main()

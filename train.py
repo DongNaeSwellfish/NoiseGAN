@@ -27,17 +27,17 @@ class Trainer(object):
 
         self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
 
-        self.cnn = models.resnet101(pretrained=True)
+        self.cnn = models.resnet50(pretrained=True)
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
 
-        self.pre_cnn_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet101.pth')
+        self.pre_cnn_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet50.pth')
         self.cnn.load_state_dict(torch.load(self.pre_cnn_path))
         print('load pretrained model from %s' % self.pre_cnn_path)
 
-        self.cnn_2 = models.resnet50(pretrained=True)
+        self.cnn_2 = models.resnet101(pretrained=True)
         self.cnn_2.fc = nn.Linear(self.cnn_2.fc.in_features, 10)
         #
-        self.pre_cnn_2_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet50.pth')
+        self.pre_cnn_2_path = os.path.join('/home', 'choikoal', 'NoiseGAN_styleloss', 'data', 'best-pre_resnet101.pth')
         self.cnn_2.load_state_dict(torch.load(self.pre_cnn_2_path))
         print('load pretrained model from %s' % self.pre_cnn_2_path)
 
@@ -215,28 +215,74 @@ class Trainer(object):
 
                 #style loss
                 feat_1 = disc[1].detach()
-                feat_1 = feat_1.view([self.batch_size,128, 12544])
-                gram_1 = torch.matmul(feat_1, torch.transpose(feat_1,1,2))
+                #feat_1 = feat_1.view([self.batch_size,128, 12544])
+                #gram_1 = torch.matmul(feat_1, torch.transpose(feat_1,1,2))
+
+                #texture_loss
+                feat_1 = feat_1.view([self.batch_size, 128, 49, 256])
+                feat_1 = torch.transpose(feat_1, 0, 3)
+                gram_1 = 0
+                for j in range(0, 256):
+                    gram_1_i = torch.matmul(feat_1[j], torch.transpose(feat_1[j], 1, 2))
+                    gram_1 += gram_1_i
+
 
                 feat_2 = disc[2].detach()
-                feat_2 = feat_2.view([self.batch_size, 256, 3136])
-                gram_2 = torch.matmul(feat_2, torch.transpose(feat_2, 1, 2))
+                #feat_2 = feat_2.view([self.batch_size, 256, 3136])
+                #gram_2 = torch.matmul(feat_2, torch.transpose(feat_2, 1, 2))
+
+                #tloss
+                feat_2 = feat_2.view([self.batch_size, 256, 49, 64])
+                feat_2 = torch.transpose(feat_2, 0, 3)
+                gram_2 = 0
+                for j in range(0, 64):
+                    gram_2_i = torch.matmul(feat_2[j], torch.transpose(feat_2[j], 1, 2))
+                    gram_2 += gram_2_i
 
                 feat_3 = disc[3].detach()
-                feat_3 = feat_3.view([self.batch_size, 512, 784])
-                gram_3 = torch.matmul(feat_3, torch.transpose(feat_3, 1, 2))
+                #feat_3 = feat_3.view([self.batch_size, 512, 784])
+                #gram_3 = torch.matmul(feat_3, torch.transpose(feat_3, 1, 2))
+
+                #tloss
+                feat_3 = feat_3.view([self.batch_size, 512, 49, 16])
+                feat_3 = torch.transpose(feat_3, 0, 3)
+                gram_3 = 0
+                for j in range(0, 16):
+                    gram_3_i = torch.matmul(feat_3[j], torch.transpose(feat_3[j], 1, 2))
+                    gram_3 += gram_3_i
 
                 feat_1_gt = disc_gt[1].detach()
-                feat_1_gt = feat_1_gt.view([self.batch_size, 128, 12544])
-                gram_1_gt = torch.matmul(feat_1_gt, torch.transpose(feat_1_gt, 1, 2))
+                #feat_1_gt = feat_1_gt.view([self.batch_size, 128, 12544])
+                #gram_1_gt = torch.matmul(feat_1_gt, torch.transpose(feat_1_gt, 1, 2))
+
+                feat_1_gt = feat_1_gt.view([self.batch_size, 128, 49, 256])
+                feat_1_gt = torch.transpose(feat_1_gt, 0, 3)
+                gram_1_gt = 0
+                for j in range(0, 256):
+                    gram_1_gt_i = torch.matmul(feat_1_gt[j], torch.transpose(feat_1_gt[j], 1, 2))
+                    gram_1_gt += gram_1_gt_i
 
                 feat_2_gt = disc_gt[2].detach()
-                feat_2_gt = feat_2_gt.view([self.batch_size, 256, 3136])
-                gram_2_gt = torch.matmul(feat_2_gt, torch.transpose(feat_2_gt, 1, 2))
+                #feat_2_gt = feat_2_gt.view([self.batch_size, 256, 3136])
+                #gram_2_gt = torch.matmul(feat_2_gt, torch.transpose(feat_2_gt, 1, 2))
+
+                feat_2_gt = feat_2_gt.view([self.batch_size, 256, 49, 64])
+                feat_2_gt = torch.transpose(feat_2_gt, 0, 3)
+                gram_2_gt = 0
+                for j in range(0, 64):
+                    gram_2_gt_i = torch.matmul(feat_2_gt[j], torch.transpose(feat_2_gt[j], 1, 2))
+                    gram_2_gt += gram_2_gt_i
 
                 feat_3_gt = disc_gt[3].detach()
-                feat_3_gt = feat_3_gt.view([self.batch_size, 512, 784])
-                gram_3_gt = torch.matmul(feat_3_gt, torch.transpose(feat_3_gt, 1, 2))
+                #feat_3_gt = feat_3_gt.view([self.batch_size, 512, 784])
+                #gram_3_gt = torch.matmul(feat_3_gt, torch.transpose(feat_3_gt, 1, 2))
+
+                feat_3_gt = feat_3_gt.view([self.batch_size, 512, 49, 16])
+                feat_3_gt = torch.transpose(feat_3_gt, 0, 3)
+                gram_3_gt = 0
+                for j in range(0, 16):
+                    gram_3_gt_i = torch.matmul(feat_3_gt[j], torch.transpose(feat_3_gt[j], 1, 2))
+                    gram_3_gt += gram_3_gt_i
 
                 style_loss_1 = torch.norm(gram_1-gram_1_gt)
                 style_loss_2 = torch.norm(gram_2-gram_2_gt)
@@ -278,9 +324,9 @@ class Trainer(object):
 
                 print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f, loss_cls: %.4f, style_loss: %.4f, style_loss_2: %.4f, style_loss_3: %.4f'
                       % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_cls.data[0],
-                         style_loss_1.data[0] * 3e-7, style_loss_2.data[0] * 1e-6, style_loss_3.data[0]*1e-6))
+                         style_loss_1.data[0] * 3e-6, style_loss_2.data[0] * 1e-5, style_loss_3.data[0]*1e-5))
                 #backward the generator
-                loss_generator = loss_fake_real + 100*loss_l1 + loss_cls + style_loss_1*3*1e-7 + style_loss_2*1*1e-6 + style_loss_3*1e-6 #initially we set weights as 1
+                loss_generator = loss_fake_real + 100*loss_l1 + loss_cls + style_loss_1*3*1e-6 + style_loss_2*1*1e-5 + style_loss_3*1e-5 #initially we set weights as 1
                 loss_generator.backward()
                 clip_gradient(self.optim_G, 0.5)
                 self.optim_G_dis.step()

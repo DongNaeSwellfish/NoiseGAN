@@ -56,7 +56,7 @@ class Decoder(nn.Module):
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.encoder = models.resnet101(pretrained=True)
+        self.encoder = models.resnet50(pretrained=True)
         self.encoder = nn.Sequential(*list(self.encoder.children())[:-2])
         self.finetune(allow=False)
 
