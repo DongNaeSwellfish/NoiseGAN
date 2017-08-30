@@ -12,13 +12,13 @@ def main(config):
     trainer = Trainer(trainloader, testloader, config)
     trainer.train_classifier(config)
     # trainer.train_conv_mask(config)
-    #     trainer.train_adversarial(config)
+    trainer.train_adversarial(config)
     # elif config.mode == 'sample':
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-    parser.add_argument('--data', default='/media/mipal/9ACAF8F1CAF8CB11/imagenet_cls_loc/CLS_LOC/ILSVRC2015/Data/CLS-LOC', type=str,
+    parser.add_argument('--data', default='/home/david/NoiseGAN/data/imgnet', type=str,
                         metavar='DIR',
                         help='path to dataset')
     parser.add_argument('--labeldir', default='/media/mipal/9ACAF8F1CAF8CB11/imagenet_cls_loc/ILSVRC2015_devkit/devkit/data/validation_gt.txt',
@@ -31,7 +31,7 @@ if __name__ == "__main__":
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
-    parser.add_argument('-b', '--batch-size', default=100, type=int,
+    parser.add_argument('-b', '--batch-size', default=20, type=int,
                         metavar='N', help='mini-batch size (default: 256)')
     parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                         metavar='LR', help='initial learning rate')
