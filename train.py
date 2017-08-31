@@ -191,7 +191,7 @@ class Trainer(object):
 
 
                 #backward the generator
-                loss_generator = loss_fake_real + 100*loss_l1 + loss_cls #initially we set weights as 1
+                loss_generator = loss_fake_real + 50*loss_l1 + loss_cls #initially we set weights as 1
                 loss_generator.backward()
                 clip_gradient(self.optim_G, 0.5)
                 self.optim_G_dis.step()
