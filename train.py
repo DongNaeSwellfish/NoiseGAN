@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torchvision
-#import numpy as np
 from torch import optim
 from torch.autograd import Variable
 from model import Discriminator
@@ -9,13 +8,11 @@ from model import Encoder, Decoder
 import torchvision.models as models
 import torch.nn.functional as func
 import os
-from logger import Logger
-
-logger = Logger('./logs')
 
 
 class Trainer(object):
-    def __init__(self, trainloader, testloader):
+    def __init__(self, trainloader, testloader, opt):
+        self.opt = opt
         self.num_gpu = 1
         self.batch_size = 10
 
@@ -27,18 +24,17 @@ class Trainer(object):
 
         self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
 
-        self.cnn = models.resnet101(pretrained=True)
+        self.cnn = models.resnet50(pretrained=True)
         self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 10)
 
-        #/home/yjyoo/Code/NoiseGAN-koal_stloss/data
-        self.pre_cnn_path = os.path.join('/home', 'yjyoo', 'Code','NoiseGAN-koal_stloss', 'data', 'best-pre_resnet101.pth')
+        self.pre_cnn_path = os.path.join('/home', 'choikoal', 'NoiseGAN_imgnet_stloss', 'data', 'best-pre_resnet50.pth')
         self.cnn.load_state_dict(torch.load(self.pre_cnn_path))
         print('load pretrained model from %s' % self.pre_cnn_path)
 
-        self.cnn_2 = models.resnet50(pretrained=True)
+        self.cnn_2 = models.resnet101(pretrained=True)
         self.cnn_2.fc = nn.Linear(self.cnn_2.fc.in_features, 10)
-        #
-        self.pre_cnn_2_path = os.path.join('/home', 'yjyoo', 'Code','NoiseGAN-koal_stloss', 'data', 'best-pre_resnet50.pth')
+
+        self.pre_cnn_2_path = os.path.join('/home', 'choikoal', 'NoiseGAN_imgnet_stloss', 'data', 'best-pre_resnet101.pth')
         self.cnn_2.load_state_dict(torch.load(self.pre_cnn_2_path))
         print('load pretrained model from %s' % self.pre_cnn_2_path)
 
@@ -46,12 +42,13 @@ class Trainer(object):
         self.imitator = models.resnet34(pretrained=True)
         self.imitator.fc = nn.Linear(self.imitator.fc.in_features,10)
 
+
         self.finetune(allow=True)
 
         self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
         self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.0005)
         self.optim_G_cls = optim.Adam(self.decoder.parameters(), lr=0.001)
-        self.optim_G = optim.Adam(self.decoder.parameters(), lr = 0.001)
+        self.optim_G = optim.Adam(self.decoder.parameters(), lr=0.001)
         self.optim_D = optim.Adam(self.discriminator.parameters(), lr=0.001)
         self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.001)
         self.optim_I = optim.Adam(self.imitator.fc.parameters(), lr = 0.001)
@@ -62,7 +59,6 @@ class Trainer(object):
         self.criterion_D = nn.CrossEntropyLoss()
         self.criterion_L1 = nn.SmoothL1Loss()
         self.criterion_I = nn.SmoothL1Loss()
-
 
         self.real_label = 1
         self.fake_label = 0
@@ -81,24 +77,24 @@ class Trainer(object):
             self.cnn_2.fc.cuda()
 
 
-
     # if allow = True, classifier resnet50 computes grad
     def finetune(self, allow=True):
         for param in self.cnn.parameters():
             param.requires_grad = True
         for param in self.cnn.fc.parameters():
-            param.requires_grad = True
+            param.requires_grad = True if allow else False
 
     # Train the fully-connected layer of resnet50 with STL10 dataset
-    def train_classifier(self):
+    def train_classifier(self, opt):
         best_score = 0
         def clip_gradient(optimizer, grad_clip):
             for group in optimizer.param_groups:
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(5):
+        for epoch in range(2):
             for i, images in enumerate(self.train_loader):
+                i += 1
                 self.cnn.fc.zero_grad()
                 images_label = Variable(images[1]).long().cuda()
                 images = images[0].float().cuda()
@@ -113,12 +109,12 @@ class Trainer(object):
                 clip_gradient(self.optim_C, 0.5)
                 self.optim_C.step()  # update with gradient
 
-                if (i % 10) == 0:
+                if (i % 50) == 0:
                     print('Epoch [%d/5], Step[%d/%d], classification loss: %.4f, ' % (
-                        epoch+1, i, total_step, loss_fc.data[0]))
+                        epoch + 1, i, total_step, loss_fc.data[0]))
 
                 # evaluation with test dataset (800 per class)
-                if (i % 249 == 0) and (i != 0):
+                if (i % len(self.train_loader) == 0) and (i != 0):
                     correct = 0
                     total = 0
                     correct_meanscore = 0
@@ -137,7 +133,7 @@ class Trainer(object):
                         correct_meanscore += c
                         total += la.size(0)
                         correct += (predicted.cpu() == la).sum()
-                    correct_meanscore /= 400  # 200 = number of iteration in one test epoch
+                    correct_meanscore /= 50  # 200 = number of iteration in one test epoch
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
 
@@ -146,14 +142,15 @@ class Trainer(object):
                         print("saving best model...")
                         torch.save(self.cnn.state_dict(), './data/best-pre_resnet.pth')
 
-    def train_adversarial(self):
-        best_score=0
+    def train_adversarial(self, opt):
+        best_score = 1
+
         def clip_gradient(optimizer, grad_clip):
             for group in optimizer.param_groups:
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(20):
+        for epoch in range(5):
             self.discriminator.train()
             self.decoder.train()
             for i, images in enumerate(self.train_loader):
@@ -161,17 +158,15 @@ class Trainer(object):
                 #                train Discriminator                 #
                 ######################################################
                 i += 1
-                labels_real = Variable(torch.ones(self.batch_size).fill_(self.real_label)).long()
-                labels_fake = Variable(torch.zeros(self.batch_size).fill_(self.fake_label)).long()
+                labels_real = Variable(torch.zeros(images[0].size(0)).fill_(self.real_label)).long()
+                labels_fake = Variable(torch.ones(images[0].size(0)).fill_(self.fake_label)).long()
 
                 image_class = images[1].cuda()
                 images = images[0].cuda()
                 labels_real = labels_real.cuda()
                 labels_fake = labels_fake.cuda()
-
                 images = Variable(images)
                 images_resized = func.upsample_bilinear(images, (224, 224))
-
 
                 self.decoder.zero_grad()
                 self.discriminator.zero_grad()
@@ -184,8 +179,10 @@ class Trainer(object):
                 image_result = images_resized.detach() + mask #- (images_resized.detach())*mask
 
                 # mask = mask * 0.5  # mask *= 0.01 is inplace operation(cannot compute gradient)
+
                 disc_gt = self.discriminator(images_resized.detach())
                 disc = self.discriminator(image_result)
+
                 #loss real
                 logit_real = disc_gt[0]
                 loss_real_real = self.criterion_D(logit_real, labels_real)
@@ -197,6 +194,7 @@ class Trainer(object):
                 loss_discriminator.backward(retain_variables=True)
                 clip_gradient(self.optim_D, 0.5)
                 self.optim_D.step()
+
 
                 #training the imitator -> imitate the gt result + blackbox_classifier result
                 labels_img_cls_true = func.softmax(self.cnn(images_resized.detach()))
@@ -214,75 +212,101 @@ class Trainer(object):
                 clip_gradient(self.optim_I, 0.5)
                 self.optim_I.step()
 
-
-                #self.discriminator.zero_grad()
-                #self.decoder.zero_grad()
-
-
-                # Train discriminator with fake image
-                #logit_fake = self.discriminator(image_result)
-                #loss_fake_fake = self.criterion_D(logit_fake, labels_fake)
-                #loss_fake_fake.backward(retain_variables=True)
-
-                ## if (i % 2) == 0:
-                #clip_gradient(self.optim_D, 0.5)
-                #self.optim_D.step()
-
                 ######################################################
                 #                  train Generator                   #
                 ######################################################
                 self.discriminator.zero_grad()
                 self.decoder.zero_grad()
-                #self.cnn.fc.zero_grad()
+                self.cnn.fc.zero_grad()
 
-                #generator losszeros
+                #generator loss
                 logit_fake = disc[0]
                 loss_fake_real = self.criterion_D(logit_fake, labels_real)
 
-                #style loss
+                # style loss
                 feat_1 = disc[1].detach()
-                feat_1 = feat_1.view([self.batch_size,128, 12544])
-                gram_1 = feat_1*feat_1.t()
-                #gram_1 = torch.matmul(feat_1, torch.transpose(feat_1,1,2))
+                # feat_1 = feat_1.view([self.batch_size,128, 12544])
+                # gram_1 = torch.matmul(feat_1, torch.transpose(feat_1,1,2))
+
+                # texture_loss
+                feat_1 = feat_1.view([images.size(0), 128, 49, 256])
+                feat_1 = torch.transpose(feat_1, 0, 3)
+                gram_1 = 0
+                for j in range(0, 256):
+                    gram_1_i = torch.matmul(feat_1[j], torch.transpose(feat_1[j], 1, 2))
+                    gram_1 += gram_1_i
 
                 feat_2 = disc[2].detach()
-                feat_2 = feat_2.view([self.batch_size, 256, 3136])
-                gram_2 = feat_2 * feat_2.t()
-                #gram_2 = torch.matmul(feat_2, torch.transpose(feat_2, 1, 2))
+                # feat_2 = feat_2.view([self.batch_size, 256, 3136])
+                # gram_2 = torch.matmul(feat_2, torch.transpose(feat_2, 1, 2))
+
+                # tloss
+                feat_2 = feat_2.view([images.size(0), 256, 49, 64])
+                feat_2 = torch.transpose(feat_2, 0, 3)
+                gram_2 = 0
+                for j in range(0, 64):
+                    gram_2_i = torch.matmul(feat_2[j], torch.transpose(feat_2[j], 1, 2))
+                    gram_2 += gram_2_i
 
                 feat_3 = disc[3].detach()
-                feat_3 = feat_3.view([self.batch_size, 512, 784])
-                gram_3 = feat_3 * feat_3.t()
-                #gram_3 = torch.matmul(feat_3, torch.transpose(feat_3, 1, 2))
+                # feat_3 = feat_3.view([self.batch_size, 512, 784])
+                # gram_3 = torch.matmul(feat_3, torch.transpose(feat_3, 1, 2))
+
+                # tloss
+                feat_3 = feat_3.view([images.size(0), 512, 49, 16])
+                feat_3 = torch.transpose(feat_3, 0, 3)
+                gram_3 = 0
+                for j in range(0, 16):
+                    gram_3_i = torch.matmul(feat_3[j], torch.transpose(feat_3[j], 1, 2))
+                    gram_3 += gram_3_i
 
                 feat_1_gt = disc_gt[1].detach()
-                feat_1_gt = feat_1_gt.view([self.batch_size, 128, 12544])
-                gram_1_gt = feat_1_gt * feat_1_gt.t()
-                #gram_1_gt = torch.matmul(feat_1_gt, torch.transpose(feat_1_gt, 1, 2))
+                # feat_1_gt = feat_1_gt.view([self.batch_size, 128, 12544])
+                # gram_1_gt = torch.matmul(feat_1_gt, torch.transpose(feat_1_gt, 1, 2))
+
+                feat_1_gt = feat_1_gt.view([images.size(0), 128, 49, 256])
+                feat_1_gt = torch.transpose(feat_1_gt, 0, 3)
+                gram_1_gt = 0
+                for j in range(0, 256):
+                    gram_1_gt_i = torch.matmul(feat_1_gt[j], torch.transpose(feat_1_gt[j], 1, 2))
+                    gram_1_gt += gram_1_gt_i
 
                 feat_2_gt = disc_gt[2].detach()
-                feat_2_gt = feat_2_gt.view([self.batch_size, 256, 3136])
-                gram_2_gt = feat_2_gt * feat_2_gt.t()
-                #gram_2_gt = torch.matmul(feat_2_gt, torch.transpose(feat_2_gt, 1, 2))
+                # feat_2_gt = feat_2_gt.view([self.batch_size, 256, 3136])
+                # gram_2_gt = torch.matmul(feat_2_gt, torch.transpose(feat_2_gt, 1, 2))
+
+                feat_2_gt = feat_2_gt.view([images.size(0), 256, 49, 64])
+                feat_2_gt = torch.transpose(feat_2_gt, 0, 3)
+                gram_2_gt = 0
+                for j in range(0, 64):
+                    gram_2_gt_i = torch.matmul(feat_2_gt[j], torch.transpose(feat_2_gt[j], 1, 2))
+                    gram_2_gt += gram_2_gt_i
 
                 feat_3_gt = disc_gt[3].detach()
-                feat_3_gt = feat_3_gt.view([self.batch_size, 512, 784])
-                gram_3_gt = feat_3_gt * feat_3_gt.t()
-                #gram_3_gt = torch.matmul(feat_3_gt, torch.transpose(feat_3_gt, 1, 2))
+                # feat_3_gt = feat_3_gt.view([self.batch_size, 512, 784])
+                # gram_3_gt = torch.matmul(feat_3_gt, torch.transpose(feat_3_gt, 1, 2))
 
-                style_loss_1 = torch.norm(gram_1-gram_1_gt)
-                style_loss_2 = torch.norm(gram_2-gram_2_gt)
-                style_loss_3 = torch.norm(gram_3-gram_3_gt)
+                feat_3_gt = feat_3_gt.view([images.size(0), 512, 49, 16])
+                feat_3_gt = torch.transpose(feat_3_gt, 0, 3)
+                gram_3_gt = 0
+                for j in range(0, 16):
+                    gram_3_gt_i = torch.matmul(feat_3_gt[j], torch.transpose(feat_3_gt[j], 1, 2))
+                    gram_3_gt += gram_3_gt_i
 
-                #tensorboard
-                info = {
-                    'style_loss_1' : style_loss_1.data[0]*3e-7,
-                    'style_loss_2' : style_loss_2.data[0]*1e-6,
-                    'style_loss_3' : style_loss_3.data[0]*1e-6
-                }
+                style_loss_1 = torch.norm(gram_1 - gram_1_gt)
+                style_loss_2 = torch.norm(gram_2 - gram_2_gt)
+                style_loss_3 = torch.norm(gram_3 - gram_3_gt)
 
-                for tag, value in info.items():
-                    logger.scalar_summary(tag, value, 250*epoch+i)
+                # # tensorboard
+                # info = {
+                #     'style_loss_1': style_loss_1.data[0] * 3e-7,
+                #     'style_loss_2': style_loss_2.data[0] * 1e-6,
+                #     'style_loss_3': style_loss_3.data[0] * 1e-6
+                # }
+                #
+                # for tag, value in info.items():
+                #     logger.scalar_summary(tag, value, 250 * epoch + i)
+                #
 
                 #l1 regularization
                 image_l1 = mask + images_resized
@@ -293,9 +317,9 @@ class Trainer(object):
                 #adversarial classification - use imitator instead of the cls
                 cnn_out = self.imitator(image_result)
                 cnn_out = func.softmax(cnn_out)
-                label_target = Variable(torch.zeros((self.batch_size, 1))).cuda()
-                one_mask = Variable(torch.zeros(self.batch_size, 10)).cuda()
-                for index in range(self.batch_size):
+                label_target = Variable(torch.zeros((images.size(0), 1))).cuda()
+                one_mask = Variable(torch.zeros(images.size(0), 10)).cuda()
+                for index in range(images.size(0)):
                     one_mask[index, image_class[index]] = 1
 
                 cnn_out_truth = one_mask.detach() * cnn_out
@@ -304,68 +328,24 @@ class Trainer(object):
 
                 #accumulated error
                 #loss_generator = sum(loss_fake_real, loss_l1, loss_cls)
-                if i%10 == 0:
-                    print(
-                    'Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f, loss_cls: %.4f, style_loss: %.4f, style_loss_2: %.4f, style_loss_3: %.4f'
-                    % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_cls.data[0],
-                       style_loss_1.data[0] * 3e-7, style_loss_2.data[0] * 1e-6, style_loss_3.data[0] * 1e-6))
+
 
                 #backward the generator
-                loss_generator = loss_fake_real + 100*loss_l1 + loss_cls + style_loss_1*3*1e-7 + style_loss_2*1*1e-6 + style_loss_3*1e-6 #initially we set weights as 1
+                loss_generator = loss_fake_real + 5*loss_l1 + loss_cls + style_loss_1*3*1e-6 + style_loss_2*1*1e-5 + style_loss_3*1e-5
+                #initially we set weights as 1
                 loss_generator.backward()
                 clip_gradient(self.optim_G, 0.5)
                 self.optim_G_dis.step()
 
-
-                #self.discriminator.zero_grad()
-                #self.decoder.zero_grad()
-                #self.cnn.fc.zero_grad()
-                #logit_fake = self.discriminator(images_resized.detach() + mask)
-                #loss_fake_real = self.criterion_D(logit_fake, labels_real)
-                #loss_fake_real.backward()  # (retain_variables=True)
-                #clip_gradient(self.optim_G_dis, 0.5)
-                #self.optim_G_dis.step()
-
-                #self.discriminator.zero_grad()
-                #self.decoder.zero_grad()
-                #self.cnn.fc.zero_grad()
-                #mask = self.decoder(self.encoder(images_resized))
-                #image_l1 = mask + images_resized
-                #loss_l1 = self.criterion_L1(image_l1, images_resized)
-                #loss_l1 = loss_l1 * 500
-                #loss_l1.backward()
-                #self.optim_L1.step()
-
-                #self.discriminator.zero_grad()
-                #self.decoder.zero_grad()
-                #self.cnn.fc.zero_grad()
-
-                ## Train generator with fake image with classifier (resnet50)
-                #mask = self.decoder(self.encoder(images_resized))
-                # mask = mask * 0.5
-                #cnn_out = self.cnn(images_resized.detach()+mask)
-                #cnn_out = func.softmax(cnn_out)
-
-                #label_target = Variable(torch.zeros((self.batch_size, 1))).cuda()
-                ## MSE loss with uniform distribution of 0.5
-                #one_mask = Variable(torch.zeros(self.batch_size, 10)).cuda()
-                #for index in range(self.batch_size):
-                #    one_mask[index, image_class[index]] = 1
-                #cnn_out_truth = one_mask.detach() * cnn_out
-                #cnn_out_truth = torch.sum(cnn_out_truth, dim=1)
-                #loss_cls = self.criterion_G_CNN(cnn_out_truth, label_target.detach())
-                #loss_cls.backward()
-                #clip_gradient(self.optim_G_cls, 0.5)
-                #self.optim_G_cls.step()
-
-                #if (i % 10 and i<250) == 0:
-                #    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
-                #          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f'
-                #          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0],
-                #             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0]))
+                if (i % 50) == 0:
+                    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
+                          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f, style_loss: %.4f, style_loss_2: %.4f, style_loss_3: %.4f'
+                          % (epoch + 1, epoch, i, total_step, loss_fake_real.data[0], loss_real_real.data[0],
+                             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0],
+                             style_loss_1.data[0] * 3e-6, style_loss_2.data[0] * 1e-5, style_loss_3.data[0] * 1e-5))
 
                 # Test the Model
-                if (i % 499 == 0) and (i != 0):
+                if (i % len(self.train_loader) == 0) and (i != 0):
                     total = 0
                     correct = 0
                     correct_meanscore = 0
@@ -381,7 +361,7 @@ class Trainer(object):
                         for index in range(self.batch_size):
                             label_mask[index, la[index]] = 1
                         mask_test = self.decoder(self.encoder(img_test_resized))
-                        reconst_images = img_test_resized + mask_test #- img_test_resized*mask_test
+                        reconst_images = img_test_resized + mask_test  # - img_test_resized*mask_test
                         outputs = self.cnn(reconst_images)
                         output_i = self.imitator(img_test_resized)
 
@@ -397,39 +377,40 @@ class Trainer(object):
                         correct += (predicted.cpu() == la).sum()
 
                         a_i = func.softmax(output_i)
-                        b_i = a_i*label_mask
+                        b_i = a_i * label_mask
                         c_i = torch.sum(b_i) / self.batch_size
                         correct_meanscore_i += c_i
                         correct_i += (predicted_i.cpu() == la).sum()
 
-                        if j % 100 == 0:
+                        if j % 10 == 0:
                             torchvision.utils.save_image(img_test_resized.data.cpu(),
                                                          './data/epoch%dimages_%d.jpg' % (epoch + 1, j))
                             torchvision.utils.save_image(mask_test.data.cpu(),
                                                          './data/epoch%dnoise_%d.jpg' % (epoch + 1, j))
                             torchvision.utils.save_image(reconst_images.data.cpu(),
                                                          './data/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
-                    correct_meanscore /= 400
-                    correct_meanscore_i /= 400
+                    correct_meanscore /= 50
+                    correct_meanscore_i /= 50
 
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
                     print('Test Accuracy of the imitator on the test images: %d %%' % (100 * correct_i / total))
                     print('Mean Accuracy of the imitator: %.4f' % correct_meanscore_i.data[0])
 
-                    if correct_meanscore.data[0] > best_score:
+                    if correct_meanscore.data[0] < best_score:
                         best_score = correct_meanscore.data[0]
                         print("saving best model...")
                         torch.save(self.decoder.state_dict(), './data/best-generator.pth')
                         torch.save(self.discriminator.state_dict(), './data/best-discriminator.pth')
                         torch.save(self.optim_G_dis.state_dict(), './data/best-optimizer.pth')
 
-
-    def evaluation(self):
-        epoch=0
-        correct = 0
+    def evaluation(self, opt):
         total = 0
+        correct = 0
         correct_meanscore = 0
+        correct_i = 0
+        correct_meanscore_i = 0
+
         j = 0
         for im, la in self.test_loader:
             j += 1
@@ -441,23 +422,36 @@ class Trainer(object):
             mask_test = self.decoder(self.encoder(img_test_resized))
             reconst_images = img_test_resized + mask_test  # - img_test_resized*mask_test
             outputs = self.cnn_2(reconst_images)
+            output_i = self.imitator(img_test_resized)
 
             _, predicted = torch.max(outputs.data, 1)
+            _, predicted_i = torch.max(output_i.data, 1)
+
+            total += la.size(0)
+
             a = func.softmax(outputs)
             b = a * label_mask
             c = torch.sum(b) / self.batch_size
             correct_meanscore += c
-            total += la.size(0)
             correct += (predicted.cpu() == la).sum()
-            if j % 100 == 0:
+
+            a_i = func.softmax(output_i)
+            b_i = a_i * label_mask
+            c_i = torch.sum(b_i) / self.batch_size
+            correct_meanscore_i += c_i
+            correct_i += (predicted_i.cpu() == la).sum()
+
+            if j % 10 == 0:
                 torchvision.utils.save_image(img_test_resized.data.cpu(),
                                              './data/test_images_%d.jpg' % (j))
                 torchvision.utils.save_image(mask_test.data.cpu(),
                                              './data/test_noise_%d.jpg' % (j))
                 torchvision.utils.save_image(reconst_images.data.cpu(),
                                              './data/test_reconst_images_%d.jpg' % (j))
-        correct_meanscore /= 400
+        correct_meanscore /= 50
+        correct_meanscore_i /= 50
+
         print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
         print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
-
-
+        print('Test Accuracy of the imitator on the test images: %d %%' % (100 * correct_i / total))
+        print('Mean Accuracy of the imitator: %.4f' % correct_meanscore_i.data[0])
