@@ -13,10 +13,9 @@ def main():
     testloader = get_loader('test', test_transform)
     trainer = Trainer(trainloader, testloader)
 
-    #trainer.train_classifier()
+    # trainer.train_classifier()
     trainer.train_adversarial()
-    trainer.evaluation()
-    #eval.eval()
+    # trainer.evaluation()
 
 if __name__ == "__main__":
     main()
