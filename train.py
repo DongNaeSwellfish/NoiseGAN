@@ -15,9 +15,10 @@ logger = Logger('./logs')
 
 
 class Trainer(object):
-    def __init__(self, trainloader, testloader):
+    def __init__(self, trainloader, testloader, opt):
+        self.opt=opt
         self.num_gpu = 1
-        self.batch_size = 10
+        self.batch_size = 20
 
         self.train_loader = trainloader
         self.test_loader = testloader
@@ -44,7 +45,7 @@ class Trainer(object):
 
         #define imitator
         self.imitator = models.resnet34(pretrained=True)
-        self.imitator.fc = nn.Linear(self.imitator.fc.in_features,10)
+        self.imitator.fc = nn.Linear(self.imitator.fc.in_features, 10)
 
         self.finetune(allow=True)
 
@@ -63,11 +64,10 @@ class Trainer(object):
         self.criterion_L1 = nn.SmoothL1Loss()
         self.criterion_I = nn.SmoothL1Loss()
 
-
         self.real_label = 1
         self.fake_label = 0
 
-        self.cls = 0
+        self.cls = 1
 
         self.l1_param = 0.001
 
@@ -89,17 +89,18 @@ class Trainer(object):
         for param in self.cnn.parameters():
             param.requires_grad = False
         for param in self.cnn.fc.parameters():
-            param.requires_grad = False
+            param.requires_grad = True
 
     # Train the fully-connected layer of resnet50 with STL10 dataset
-    def train_classifier(self):
+    def train_classifier(self, opt):
         best_score = 0
+
         def clip_gradient(optimizer, grad_clip):
             for group in optimizer.param_groups:
                 for param in group['params']:
                     param.grad.data.clamp_(-grad_clip, grad_clip)
         total_step = len(self.train_loader)
-        for epoch in range(5):
+        for epoch in range(2):
             for i, images in enumerate(self.train_loader):
                 i += 1
                 self.cnn.fc.zero_grad()
@@ -128,29 +129,30 @@ class Trainer(object):
                     for im, la in self.test_loader:
                         # volatile means this Variable requires no grad computation
                         im_test = Variable(im, volatile=True).cuda()
-                        label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
-                        for index in range(self.batch_size):
+                        label_mask = Variable(torch.zeros(la.size(0), 10), volatile=True).cuda()
+                        for index in range(la.size(0)):
                             label_mask[index, la[index]] = 1
                         img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
                         outputs = self.cnn(img_test_resized.detach())
                         _, predicted = torch.max(outputs.data, 1)
                         a = func.softmax(outputs)
                         b = a * label_mask
-                        c = torch.sum(b) / self.batch_size
+                        c = torch.sum(b) / la.size(0)
                         correct_meanscore += c
                         total += la.size(0)
                         correct += (predicted.cpu() == la).sum()
-                    correct_meanscore /= 400  # 200 = number of iteration in one test epoch
+                    correct_meanscore /= 25  # 200 = number of iteration in one test epoch
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
 
                     if correct_meanscore.data[0] > best_score:
                         best_score = correct_meanscore.data[0]
                         print("saving best model...")
-                        torch.save(self.cnn.state_dict(), './data/best-pre_resnet.pth')
+                        torch.save(self.cnn.state_dict(), './data/best-pre_resnet50.pth')
 
-    def train_adversarial(self):
+    def train_adversarial(self, opt):
         best_score=0
+
         def clip_gradient(optimizer, grad_clip):
             for group in optimizer.param_groups:
                 for param in group['params']:
@@ -164,12 +166,12 @@ class Trainer(object):
                 #                train Discriminator                 #
                 ######################################################
                 i += 1
-                labels_real = Variable(torch.ones(self.batch_size).fill_(self.real_label)).long()
-                labels_fake = Variable(torch.zeros(self.batch_size).fill_(self.fake_label)).long()
+                labels_real = Variable(torch.ones(images[0].size(0)).fill_(self.real_label)).long()
+                labels_fake = Variable(torch.zeros(images[0].size(0)).fill_(self.fake_label)).long()
 
                 image_class = Variable(images[1].cuda())
-                cls0_mask = Variable(torch.zeros(self.batch_size)).cuda().long()
-                for index in range(self.batch_size):
+                cls0_mask = Variable(torch.zeros(images[0].size(0))).cuda().long()
+                for index in range(images[0].size(0)):
                     if image_class.data[index] == self.cls:
                         cls0_mask[index] = 1
 
@@ -239,27 +241,20 @@ class Trainer(object):
 
                 #adversarial classification - use imitator instead of the cls
                 cnn_out = self.imitator(image_result)
-                label_target = Variable(self.cls*torch.ones(self.batch_size)).cuda().long()
+                label_target = Variable(self.cls*torch.ones(images.size(0))).cuda().long()
 
                 loss_cls = self.criterion_G_CNN(cnn_out, label_target.detach())
 
                 #accumulated error
-                #loss_generator = sum(loss_fake_real, loss_l1, loss_cls)
                 if i % 50 == 0:
                     print('Epoch [%d/%d], Step[%d/%d], loss_real_real: %.4f, loss_fake_real: %.4f, loss_cls: %.4f'
                           % (epoch + 1, epoch, i, total_step,loss_real_real.data[0], loss_fake_real.data[0], loss_cls.data[0]))
 
                 #backward the generator
-                loss_generator = loss_fake_real + 200*loss_l1 + loss_cls  #initially we set weights as 1
+                loss_generator = loss_fake_real + 100*loss_l1 + loss_cls  #initially we set weights as 1
                 loss_generator.backward()
                 clip_gradient(self.optim_G, 0.5)
                 self.optim_G_dis.step()
-
-                #if (i % 10 and i<250) == 0:
-                #    print('Epoch [%d/%d], Step[%d/%d], loss_fake_real: %.4f,'
-                #          ' ''loss_real_real: %.4f, loss_fake_fake: %.4f, cls_loss: %.4f, l1_loss: %.4f'
-                #          % (epoch + 1, epoch, i + 1, total_step, loss_fake_real.data[0], loss_real_real.data[0],
-                #             loss_fake_fake.data[0], loss_cls.data[0], loss_l1.data[0]))
 
                 # Test the Model
                 if (i % len(self.train_loader) == 0) and (i != 0) and(epoch % 2 == 0):
@@ -303,15 +298,15 @@ class Trainer(object):
                         correct_meanscore_i += c_i
                         correct_i += (predicted_i.cpu() == la).sum()
 
-                        if j % 200 == 0:
+                        if j % 100 == 0:
                             torchvision.utils.save_image(img_test_resized.data.cpu(),
                                                          './data/epoch%dimages_%d.jpg' % (epoch + 1, j))
                             torchvision.utils.save_image(mask_test.data.cpu(),
                                                          './data/epoch%dnoise_%d.jpg' % (epoch + 1, j))
                             torchvision.utils.save_image(reconst_images.data.cpu(),
                                                          './data/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
-                    correct_meanscore /= (8000/self.batch_size)
-                    correct_meanscore_i /= (8000/self.batch_size)
+                    correct_meanscore /= (500/self.batch_size)
+                    correct_meanscore_i /= (500/self.batch_size)
 
                     print('Test Accuracy of the imitator on the masked images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
@@ -328,8 +323,6 @@ class Trainer(object):
                     total = 0
                     correct = 0
                     correct_meanscore = 0
-                    correct_i = 0
-                    correct_meanscore_i = 0
 
                     j = 0
                     for im, la in self.test_loader:
@@ -354,7 +347,7 @@ class Trainer(object):
                         correct_meanscore += c
                         correct += (predicted.cpu() == label_target).sum()
 
-                    correct_meanscore /= (8000/self.batch_size)
+                    correct_meanscore /= (500/self.batch_size)
 
                     print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
                     print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
@@ -369,8 +362,8 @@ class Trainer(object):
             im_test = Variable(im, volatile=True).cuda()
             img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
             label_target = self.cls * torch.ones(la.size(0)).long()
-            label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
-            for index in range(self.batch_size):
+            label_mask = Variable(torch.zeros(la.size(0), 10), volatile=True).cuda()
+            for index in range(la.size(0)):
                 label_mask[index, self.cls] = 1
             mask_test = self.decoder(self.encoder(img_test_resized))
             reconst_images = img_test_resized + mask_test  # - img_test_resized*mask_test
@@ -379,7 +372,7 @@ class Trainer(object):
             _, predicted = torch.max(outputs.data, 1)
             a = func.softmax(outputs)
             b = a * label_mask
-            c = torch.sum(b) / self.batch_size
+            c = torch.sum(b) / la.size(0)
             correct_meanscore += c
             total += la.size(0)
             correct += (predicted.cpu() == label_target).sum()
@@ -393,5 +386,3 @@ class Trainer(object):
         correct_meanscore /= (8000/self.batch_size)
         print('Test Accuracy of the model on the test images: %d %%' % (100 * correct / total))
         print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
-
-
