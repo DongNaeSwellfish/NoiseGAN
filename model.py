@@ -69,6 +69,27 @@ class Encoder(nn.Module):
             param.requires_grad = True if allow else False
 
 
+#class Discriminator(nn.Module):
+#    """Discriminator containing 4 convolutional layers."""
+
+#    def __init__(self, image_size=224, conv_dim=128):
+#        super(Discriminator, self).__init__()
+#        self.conv1 = conv(3, conv_dim, 4, bn=False)
+#        self.conv2 = conv(conv_dim, conv_dim * 2, 4)
+#        self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
+#        self.conv4 = conv(conv_dim * 4, conv_dim * 8, 4)
+#        self.conv5 = conv(conv_dim * 8, conv_dim * 8, 4)
+#        self.fc = conv(conv_dim * 8, 2, int(image_size / 32), 3, 0, False)
+
+#    def forward(self, x):  # If image_size is 64, output shape is as below.
+#        out = F.leaky_relu(self.conv1(x), 0.05)      # (?, 128, 112, 112)
+#        out = F.leaky_relu(self.conv2(out), 0.05)    # (?, 256, 56, 56)
+#        out = F.leaky_relu(self.conv3(out), 0.05)    # (?, 512, 28, 28)
+#        out = F.leaky_relu(self.conv4(out), 0.05)    # (?, 1024, 14, 14)
+#        out = F.leaky_relu(self.conv5(out), 0.05)    # (?, 1024, 7 , 7)
+#        out = self.fc(out).squeeze()
+#        return out
+
 class Discriminator(nn.Module):
     """Discriminator containing 4 convolutional layers."""
 
@@ -83,40 +104,62 @@ class Discriminator(nn.Module):
 
     def forward(self, x):  # If image_size is 64, output shape is as below.
         out = F.leaky_relu(self.conv1(x), 0.05)      # (?, 128, 112, 112)
+        relu_1= out
         out = F.leaky_relu(self.conv2(out), 0.05)    # (?, 256, 56, 56)
+        relu_2 = out
         out = F.leaky_relu(self.conv3(out), 0.05)    # (?, 512, 28, 28)
+        relu_3 = out
         out = F.leaky_relu(self.conv4(out), 0.05)    # (?, 1024, 14, 14)
         out = F.leaky_relu(self.conv5(out), 0.05)    # (?, 1024, 7 , 7)
         out = self.fc(out).squeeze()
-        return out
+        return out, relu_1 ,relu_2, relu_3
 
-class Discriminator(nn.Module):
-    """Discriminator containing 4 convolutional layers."""
-
+class Discriminator_cls(nn.Module):
     def __init__(self, image_size=224, conv_dim=128):
-        super(Discriminator, self).__init__()
+        super(Discriminator_cls, self).__init__()
         self.conv1 = conv(3, conv_dim, 4, bn=False)
-        self.conv1_2 = conv(conv_dim, conv_dim, 3, stride=1)
         self.conv2 = conv(conv_dim, conv_dim * 2, 4)
-        self.conv2_2 = conv(conv_dim * 2, conv_dim * 2, 3, stride=1)
         self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
-        self.conv3_2 = conv(conv_dim * 4, conv_dim * 4, 3, stride=1)
         self.conv4 = conv(conv_dim * 4, conv_dim * 8, 4)
-        self.conv4_2 = conv(conv_dim * 8, conv_dim * 8, 3, stride=1)
         self.conv5 = conv(conv_dim * 8, conv_dim * 8, 4)
-        self.conv5_2 = conv(conv_dim * 8, conv_dim * 8, 3, stride=1)
-        self.fc = conv(conv_dim * 8, 2, int(image_size / 32), 1, 0, False)
+        self.fc = conv(conv_dim * 8, 2, int(image_size / 32), 3, 0, False)
 
     def forward(self, x):  # If image_size is 64, output shape is as below.
         out = F.leaky_relu(self.conv1(x), 0.05)  # (?, 128, 112, 112)
-        out = F.leaky_relu(self.conv1_2(out), 0.05)  # (?, 128, 112, 112)
         out = F.leaky_relu(self.conv2(out), 0.05)  # (?, 256, 56, 56)
-        out = F.leaky_relu(self.conv2_2(out), 0.05)  # (?, 256, 56, 56)
         out = F.leaky_relu(self.conv3(out), 0.05)  # (?, 512, 28, 28)
-        out = F.leaky_relu(self.conv3_2(out), 0.05)  # (?, 512, 28, 28)
         out = F.leaky_relu(self.conv4(out), 0.05)  # (?, 1024, 14, 14)
-        out = F.leaky_relu(self.conv4_2(out), 0.05)  # (?, 1024, 14, 14)
         out = F.leaky_relu(self.conv5(out), 0.05)  # (?, 1024, 7 , 7)
-        out = F.leaky_relu(self.conv5_2(out), 0.05)  # (?, 1024, 7 , 7)
         out = self.fc(out).squeeze()
         return out
+
+#class Discriminator(nn.Module):
+#    """Discriminator containing 4 convolutional layers."""
+
+#    def __init__(self, image_size=224, conv_dim=128):
+#        super(Discriminator, self).__init__()
+#        self.conv1 = conv(3, conv_dim, 4, bn=False)
+#        self.conv1_2 = conv(conv_dim, conv_dim, 3, stride=1)
+#        self.conv2 = conv(conv_dim, conv_dim * 2, 4)
+#        self.conv2_2 = conv(conv_dim * 2, conv_dim * 2, 3, stride=1)
+#        self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
+#        self.conv3_2 = conv(conv_dim * 4, conv_dim * 4, 3, stride=1)
+#        self.conv4 = conv(conv_dim * 4, conv_dim * 8, 4)
+#        self.conv4_2 = conv(conv_dim * 8, conv_dim * 8, 3, stride=1)
+#        self.conv5 = conv(conv_dim * 8, conv_dim * 8, 4)
+#        self.conv5_2 = conv(conv_dim * 8, conv_dim * 8, 3, stride=1)
+#        self.fc = conv(conv_dim * 8, 2, int(image_size / 32), 1, 0, False)
+
+#    def forward(self, x):  # If image_size is 64, output shape is as below.
+#        out = F.leaky_relu(self.conv1(x), 0.05)  # (?, 128, 112, 112)
+#        out = F.leaky_relu(self.conv1_2(out), 0.05)  # (?, 128, 112, 112)
+#        out = F.leaky_relu(self.conv2(out), 0.05)  # (?, 256, 56, 56)
+#        out = F.leaky_relu(self.conv2_2(out), 0.05)  # (?, 256, 56, 56)
+#        out = F.leaky_relu(self.conv3(out), 0.05)  # (?, 512, 28, 28)
+#        out = F.leaky_relu(self.conv3_2(out), 0.05)  # (?, 512, 28, 28)
+#        out = F.leaky_relu(self.conv4(out), 0.05)  # (?, 1024, 14, 14)
+#        out = F.leaky_relu(self.conv4_2(out), 0.05)  # (?, 1024, 14, 14)
+#        out = F.leaky_relu(self.conv5(out), 0.05)  # (?, 1024, 7 , 7)
+#        out = F.leaky_relu(self.conv5_2(out), 0.05)  # (?, 1024, 7 , 7)
+#        out = self.fc(out).squeeze()
+#        return out
