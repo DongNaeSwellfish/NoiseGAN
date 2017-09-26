@@ -1,2 +1,4 @@
 data/
 logs/
+pretrained/
+trained_model/

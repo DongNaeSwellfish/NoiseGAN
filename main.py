@@ -7,12 +7,13 @@ import os
 
 
 def main(config):
-    trainloader, testloader = get_loader(config)
+    trainloader, testloader, class1_loader = get_loader(config)
 
-    trainer = Trainer(trainloader, testloader, config)
-    trainer.train_classifier(config)
+    trainer = Trainer(trainloader, testloader, class1_loader, config)
+    # trainer.train_classifier(config)
     # trainer.train_conv_mask(config)
-    trainer.train_adversarial(config)
+    # trainer.train_adversarial(config)
+    trainer.train_GANmode(config)
     # elif config.mode == 'sample':
 
 
@@ -21,10 +22,6 @@ if __name__ == "__main__":
     parser.add_argument('--data', default='/home/david/NoiseGAN/data/imgnet', type=str,
                         metavar='DIR',
                         help='path to dataset')
-    parser.add_argument('--labeldir', default='/media/mipal/9ACAF8F1CAF8CB11/imagenet_cls_loc/ILSVRC2015_devkit/devkit/data/validation_gt.txt',
-                        type=str,
-                        metavar='DIR',
-                        help='path to labeldir')
     parser.add_argument('-j', '--workers', default=3, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--epochs', default=90, type=int, metavar='N',
