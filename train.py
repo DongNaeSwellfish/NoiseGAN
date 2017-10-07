@@ -292,8 +292,7 @@ class Trainer(object):
 
 
                 #input batch
-                disc_cat = torch.cat((images_resized.detach(), mask), 1)
-                logit_real = self.discriminator(disc_cat)
+                logit_real = self.discriminator(image_result)
                 loss_real_real = self.criterion_D(logit_real[0], cls0_mask)
 
 
@@ -327,8 +326,8 @@ class Trainer(object):
 
                 #image_result =  self.plambda*mask+ images_resized.detach()
                 # gan 1
-                gen_result = torch.cat((images_resized.detach(), mask), 1)
-                logit_fake = self.discriminator(gen_result)
+                #gen_result = torch.cat((images_resized.detach(), mask), 1)
+                logit_fake = self.discriminator(image_result)
                 loss_fake_real = self.criterion_D(logit_fake[0], cls1_mask) #all the labels to be true
 
                 #l1 regularization
