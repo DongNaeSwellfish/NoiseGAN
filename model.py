@@ -126,7 +126,7 @@ class Discriminator(nn.Module):
 
     def __init__(self, image_size=224, conv_dim=128):
         super(Discriminator, self).__init__()
-        self.conv1 = conv(6, conv_dim, 4, bn=False)
+        self.conv1 = conv(3, conv_dim, 4, bn=False)
         self.conv2 = conv(conv_dim, conv_dim * 2, 4)
         self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
         self.conv4 = conv(conv_dim * 4, conv_dim * 8, 4)
