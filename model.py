@@ -23,18 +23,31 @@ class Generator(nn.Module):
     def __init__(self, conv_dim=128, z_dim=512, image_size=224):
         super(Generator, self).__init__()
         self.fc = deconv(z_dim, conv_dim * 8, int(image_size / 16), 1, 0, bn=False)
-        self.deconv1 = deconv(conv_dim * 8, conv_dim * 4, 4)
-        self.deconv2 = deconv(conv_dim * 4, conv_dim * 2, 4)
-        self.deconv3 = deconv(conv_dim * 2, conv_dim, 4)
-        self.deconv4 = deconv(conv_dim, 3, 4, bn=False)
+        self.deconv2 = deconv(conv_dim * 8, conv_dim * 4, 4)
+        self.deconv2_1 = deconv(conv_dim * 4, conv_dim * 4, 3, stride=1)
+        self.deconv2_2 = deconv(conv_dim * 4, conv_dim * 4, 3, stride=1)
+        self.deconv3 = deconv(conv_dim * 4, conv_dim * 2, 4)
+        self.deconv3_1 = deconv(conv_dim * 2, conv_dim * 2, 3, stride=1)
+        self.deconv3_2 = deconv(conv_dim * 2, conv_dim * 2, 3, stride=1)
+        self.deconv4 = deconv(conv_dim * 2, conv_dim, 4)
+        self.deconv4_1 = deconv(conv_dim, conv_dim, 3, stride=1)
+        self.deconv4_2 = deconv(conv_dim, conv_dim, 3, stride=1)
+        self.deconv5 = deconv(conv_dim, 3, 4, bn=False)
+
 
     def forward(self, z):
         z = z.view(z.size(0), z.size(1), 1, 1)  # If image_size is 64, output shape is as below.
         out = self.fc(z)                                        # (?, 512, 4, 4)
-        out = F.leaky_relu(self.deconv1(out), 0.05)             # (?, 256, 8, 8)
-        out = F.leaky_relu(self.deconv2(out), 0.05)             # (?, 128, 16, 16)
-        out = F.leaky_relu(self.deconv3(out), 0.05)             # (?, 64, 32, 32)
-        out = F.tanh(self.deconv4(out))                         # (?, 3, 64, 64)
+        out = F.leaky_relu(self.deconv2(out),   0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.deconv2_1(out), 0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.deconv2_2(out), 0.05)  # (?, 256, 28, 28)
+        out = F.leaky_relu(self.deconv3(out),   0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.deconv3_1(out), 0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.deconv3_2(out), 0.05)  # (?, 128, 56, 56)
+        out = F.leaky_relu(self.deconv4(out),   0.05)  # (?, 64, 112, 112)
+        out = F.leaky_relu(self.deconv4_1(out), 0.05)  # (?, 64, 112, 112)
+        out = F.leaky_relu(self.deconv4_2(out), 0.05)  # (?, 64, 112, 112)
+        out = F.tanh(self.deconv5(out))                # (?, 3, 224, 224)
         return out
 
 class Decoder(nn.Module):
@@ -101,7 +114,7 @@ class Discriminator(nn.Module):
         self.conv4_2 = conv(conv_dim * 8, conv_dim * 8, 3, stride=1)
         self.conv5 = conv(conv_dim * 8, conv_dim * 8, 4)
         self.conv5_2 = conv(conv_dim * 8, conv_dim * 8, 3, stride=1)
-        self.fc = conv(conv_dim * 8, 2, int(image_size / 32), 1, 0, False)
+        self.fc = conv(conv_dim * 8, 10, int(image_size / 32), 1, 0, False)
 
     def forward(self, x):  # If image_size is 64, output shape is as below.
         out = F.leaky_relu(self.conv1(x), 0.05)      # (?, 128, 112, 112)
