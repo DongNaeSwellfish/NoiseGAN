@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 # from dataloader import get_loader
-from train import Trainer
+from train2 import Trainer
 from ILSVRC_loader import get_loader
 #from eval import Eval
 import argparse

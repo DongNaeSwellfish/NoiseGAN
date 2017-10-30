@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 # from dataloader import get_loader
-from train import Trainer
+from train4 import Trainer
 from ILSVRC_loader import get_loader
 #from eval import Eval
 import argparse
@@ -55,3 +55,4 @@ if __name__ == "__main__":
                         help='use pre-trained model')
     args = parser.parse_args()
     main(args)
+

@@ -22,25 +22,19 @@ class Trainer(object):
         self.train_loader = trainloader
         self.test_loader = testloader
 
-        self.encoder = Encoder().cuda(0)
-        self.decoder = Decoder(conv_dim=64).cuda(0)
-        self.decoder_path = os.path.join('/home', 'mipal', 'psw_exp', 'exp_adv', 'NoiseGAN', 'data', 'table1_img50',
-                                         'vgg', 'best-decoder.pth')
-        # torch.save(self.encoder.state_dict(), './data/table1_img50/vgg/best-encoder.pth')
-        self.decoder.load_state_dict(torch.load(self.decoder_path))
-        #self.decoder_scratch = Decoder_scratch(image_size=224, conv_dim=64).cuda()
-        #self.encoder_scratch = Encoder_scratch(image_size=224, conv_dim=64).cuda()
+        self.encoder = Encoder().cuda(1)
+        self.decoder = Decoder(conv_dim=64).cuda(1)
+        #self.decoder_scratch = Decoder_scratch(image_size=224, conv_dim=64).cuda(1)
+        #self.encoder_scratch = Encoder_scratch(image_size=224, conv_dim=64).cuda(1)
 
-        self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda()
-        #self.discriminator_cls = Discriminator_cls(image_size=224, conv_dim=128).cuda()
+        self.discriminator = Discriminator(image_size=224, conv_dim=128).cuda(1)
+        #self.discriminator_cls = Discriminator_cls(image_size=224, conv_dim=128).cuda(1)
 
         #self.cnn = models.vgg16(pretrained=True)
         #self.cnn.fc = nn.Linear(self.cnn.fc.in_features, 50)
         #self.cnn.classifier._modules['6'] = nn.Linear(4096, 50)
-        # self.cnn = models.densenet169(pretrained=True)
-        # self.cnn.classifier = nn.Linear(self.cnn.classifier.in_features, 50)
-        self.cnn = models.vgg16(pretrained=True)
-        self.cnn.classifier._modules['6'] = nn.Linear(4096, 50)
+        self.cnn = models.densenet169(pretrained=True)
+        self.cnn.classifier = nn.Linear(self.cnn.classifier.in_features, 50)
         #
 
         # positive bank
@@ -57,7 +51,7 @@ class Trainer(object):
 
         # /home/yjyoo/Code/NoiseGAN-koal_stloss/data
         #self.pre_cnn_path = os.path.join('/home', 'mipal', 'NoiseGAN', 'data', 'best-pre_resnet101_stl.pth')
-        self.pre_cnn_path = os.path.join('/home', 'mipal', 'psw_exp', 'exp_adv','NoiseGAN', 'scratch', 'best-pre_vgg16_imgnet50.pth')
+        self.pre_cnn_path = os.path.join('/home', 'mipal', 'psw_exp', 'exp_adv','NoiseGAN', 'scratch', 'best-pre_densenet169_imgnet50.pth')
         self.cnn.load_state_dict(torch.load(self.pre_cnn_path))
         print('load pretrained model from %s' % self.pre_cnn_path)
 
@@ -68,7 +62,6 @@ class Trainer(object):
         self.pre_cnn_2_path = os.path.join('/home', 'mipal', 'psw_exp', 'exp_adv','NoiseGAN', 'scratch', 'best-pre_resnet50_imgnet50.pth')
         self.cnn_2.load_state_dict(torch.load(self.pre_cnn_2_path))
         print('load pretrained model from %s' % self.pre_cnn_2_path)
-
         #
         # if self.pretrain==True:
         #     self.pre_enc_path = os.path.join('/home', 'yjyoo', 'Code', 'NoiseGAN-blackbox_enhance_LS', 'data',
@@ -109,35 +102,33 @@ class Trainer(object):
 
         self.l1_param = 0.001
 
-        # self.encoder.cuda()
-        # self.decoder.cuda()
-        # self.decoder_scratch.cuda()
-        # self.encoder_scratch.cuda()
-        # self.discriminator.cuda()
-        # #self.discriminator_cls.cuda()
-        # self.cnn.cuda()
-        # #self.cnn.fc.cuda()
-        # #self.imitator.cuda()
-        # #self.imitator.fc.cuda()
-        # self.cnn_2.cuda()
-        # #self.cnn_2.fc.cuda()
-        self.encoder = (self.encoder).cuda(0)
-        self.decoder = (self.decoder).cuda(0)
-        self.discriminator = (self.discriminator).cuda(0)
-        self.cnn = (self.cnn).cuda(0)
-        self.cnn_2 = (self.cnn_2).cuda(0)
+        # self.encoder.cuda(1)
+        # self.decoder.cuda(1)
+        # self.decoder_scratch.cuda(1)
+        # self.encoder_scratch.cuda(1)
+        # self.discriminator.cuda(1)
+        # #self.discriminator_cls.cuda(1)
+        # self.cnn.cuda(1)
+        # #self.cnn.fc.cuda(1)
+        # #self.imitator.cuda(1)
+        # #self.imitator.fc.cuda(1)
+        # self.cnn_2.cuda(1)
+        # #self.cnn_2.fc.cuda(1)
+        self.encoder = (self.encoder).cuda(1)
+        self.decoder = (self.decoder).cuda(1)
+        self.discriminator = (self.discriminator).cuda(1)
+        self.cnn = (self.cnn).cuda(1)
+        self.cnn_2 = (self.cnn_2).cuda(1)
 
 
     # if allow = True, classifier resnet50 computes grad
     def finetune(self, allow=True):
         for param in self.cnn.parameters():
             param.requires_grad = False
-        # for param in self.cnn.fc.parameters():
-        #     param.requires_grad = True
-        for param in self.cnn.classifier._modules['6'].parameters():
+        #for param in self.cnn.classifier._modules['6'].parameters():
+        #    param.requires_grad = True
+        for param in self.cnn.classifier.parameters():
             param.requires_grad = True
-        # for param in self.cnn.classifier.parameters():
-        #     param.requires_grad = True
 
     # Train the fully-connected layer of resnet50 with STL10 dataset
     def train_classifier(self):
@@ -152,8 +143,8 @@ class Trainer(object):
                 i += 1
                 # self.cnn.classifier._modules['6'].zero_grad()
                 self.cnn.zero_grad()
-                images_label = Variable(images[1]).long().cuda()
-                images = images[0].float().cuda()
+                images_label = Variable(images[1]).long().cuda(1)
+                images = images[0].float().cuda(1)
                 images = Variable(images)
 
                 img_resized = func.upsample_bilinear(images, size=(224, 224))  # (96x96 -> 224x224)
@@ -176,8 +167,8 @@ class Trainer(object):
                     correct_meanscore = 0
                     for im, la in self.test_loader:
                         # volatile means this Variable requires no grad computation
-                        im_test = Variable(im, volatile=True).cuda()
-                        label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda()
+                        im_test = Variable(im, volatile=True).cuda(1)
+                        label_mask = Variable(torch.zeros(self.batch_size, 10), volatile=True).cuda(1)
                         for index in range(self.batch_size):
                             label_mask[index, la[index]] = 1
                         img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
@@ -214,7 +205,7 @@ class Trainer(object):
                 self.decoder_scratch.train()
 
                 for i, images in enumerate(self.train_loader):
-                    images = images[0].cuda()
+                    images = images[0].cuda(1)
                     images = Variable(images)
                     images_resized = func.upsample_bilinear(images, (224, 224))
 
@@ -250,16 +241,16 @@ class Trainer(object):
                 ######################################################
 
                 i += 1
-                labels_real = Variable(torch.FloatTensor(np.ones(images[0].size(0)))).cuda(0)
-                #labels_fake = Variable(torch.FloatTensor(np.zeros(self.batch_size))).cuda()
+                labels_real = Variable(torch.FloatTensor(np.ones(images[0].size(0)))).cuda(1)
+                #labels_fake = Variable(torch.FloatTensor(np.zeros(self.batch_size))).cuda(1)
 
-                image_class = Variable(images[1].cuda(0))
+                image_class = Variable(images[1].cuda(1))
                 np_image_class = image_class.cpu().data.numpy()
-                images = images[0].cuda(0)
+                images = images[0].cuda(1)
 
 
-                labels_real = labels_real.cuda(0)
-                #labels_fake = labels_fake.cuda()
+                labels_real = labels_real.cuda(1)
+                #labels_fake = labels_fake.cuda(1)
 
                 images = Variable(images)
                 images_resized = func.upsample_bilinear(images, (224, 224))
@@ -284,10 +275,10 @@ class Trainer(object):
                 _, cls_class_o = torch.max(func.softmax(self.cnn(images_resized.detach())), 1)
 
                 #mask setting + bank stack
-                #clsn_mask = Variable(torch.zeros(self.batch_size)).cuda().long()
-                #clsp_mask = Variable(torch.zeros(self.batch_size)).cuda().long()
-                cls0_mask = Variable(torch.FloatTensor(np.zeros(images.size(0)))).cuda(0)
-                cls1_mask = Variable(torch.FloatTensor(np.ones(images.size(0)))).cuda(0)
+                #clsn_mask = Variable(torch.zeros(self.batch_size)).cuda(1).long()
+                #clsp_mask = Variable(torch.zeros(self.batch_size)).cuda(1).long()
+                cls0_mask = Variable(torch.FloatTensor(np.zeros(images.size(0)))).cuda(1)
+                cls1_mask = Variable(torch.FloatTensor(np.ones(images.size(0)))).cuda(1)
                 cnt_pos = 0
                 #cnt_neg = 0
                 #nZeroIdx = []
@@ -319,7 +310,7 @@ class Trainer(object):
                 loss_discriminator = loss_real_real #+ nloss_real_real + ploss_real_real
                 loss_discriminator.backward(retain_variables=True)
                 clip_gradient(self.optim_D, 0.5)
-                # self.optim_D.step()
+                self.optim_D.step()
 
                 cnt_tot += cnt_pos
 
@@ -335,8 +326,8 @@ class Trainer(object):
                 #self.imitator.fc.zero_grad()
 
 
-                #img_batch_var = Variable(torch.FloatTensor(p_img_batch.copy())).cuda()
-                #mask_batch_var = Variable(torch.FloatTensor(p_mask_batch.copy())).cuda()
+                #img_batch_var = Variable(torch.FloatTensor(p_img_batch.copy())).cuda(1)
+                #mask_batch_var = Variable(torch.FloatTensor(p_mask_batch.copy())).cuda(1)
 
                 #mask = self.decoder(self.encoder(images_resized.detach()))
                 #mask = self.decoder_scratch(self.encoder_scratch(images_resized))
@@ -364,7 +355,7 @@ class Trainer(object):
 
                 loss_generator.backward()
                 clip_gradient(self.optim_G_dis, 0.5)
-                # self.optim_G_dis.step()
+                self.optim_G_dis.step()
 
                 #add
                 lcls += loss_cls.data[0]
@@ -381,79 +372,79 @@ class Trainer(object):
 
 
                 # Test the Model
-                #if (i % len(self.train_loader) == 0) and (i!=0):
-                total = 0.0
-                correct = 0.0
-                correct_o = 0.0
-                correct_meanscore = 0
+                if (i % len(self.train_loader) == 0) and (i!=0):
+                    total = 0.0
+                    correct = 0.0
+                    correct_o = 0.0
+                    correct_meanscore = 0
 
-                correct_i = 0.0
-                correct_io = 0.0
-                correct_meanscore_i = 0
+                    correct_i = 0.0
+                    correct_io = 0.0
+                    correct_meanscore_i = 0
 
-                j = 0
-                for im, la in self.test_loader:
-                    j += 1
-                    im_test = Variable(im, volatile=True).cuda(0)
-                    img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
+                    j = 0
+                    for im, la in self.test_loader:
+                        j += 1
+                        im_test = Variable(im, volatile=True).cuda(1)
+                        img_test_resized = func.upsample_bilinear(im_test, size=(224, 224))
 
-                    label_mask = Variable(torch.zeros(la.size(0), 50), volatile=True).cuda(0)
-                    label_mask_i = Variable(torch.zeros(la.size(0), 50), volatile=True).cuda(0)
+                        label_mask = Variable(torch.zeros(la.size(0), 50), volatile=True).cuda(1)
+                        label_mask_i = Variable(torch.zeros(la.size(0), 50), volatile=True).cuda(1)
 
-                    for index in range(la.size(0)):
-                        label_mask[index, la[index]] = 1
-                        label_mask_i[index, la[index]] = 1
+                        for index in range(la.size(0)):
+                            label_mask[index, la[index]] = 1
+                            label_mask_i[index, la[index]] = 1
 
-                    #mask_test = self.decoder(self.encoder(img_test_resized))
-                    mask_test = self.decoder(self.encoder(img_test_resized))
-                    reconst_images = self.plambda*mask_test + img_test_resized
-                    outputs = self.cnn(reconst_images)
-                    output_i = self.cnn_2(reconst_images)
-                    outputs_o = self.cnn(img_test_resized)
-                    outputs_io = self.cnn_2(img_test_resized)
+                        #mask_test = self.decoder(self.encoder(img_test_resized))
+                        mask_test = self.decoder(self.encoder(img_test_resized))
+                        reconst_images = self.plambda*mask_test + img_test_resized
+                        outputs = self.cnn(reconst_images)
+                        output_i = self.cnn_2(reconst_images)
+                        outputs_o = self.cnn(img_test_resized)
+                        outputs_io = self.cnn_2(img_test_resized)
 
-                    _, predicted = torch.max(outputs.data, 1)
-                    _, predicted_i = torch.max(output_i.data, 1)
-                    _, predicted_o = torch.max(outputs_o.data, 1)
-                    _, predicted_io = torch.max(outputs_io.data, 1)
+                        _, predicted = torch.max(outputs.data, 1)
+                        _, predicted_i = torch.max(output_i.data, 1)
+                        _, predicted_o = torch.max(outputs_o.data, 1)
+                        _, predicted_io = torch.max(outputs_io.data, 1)
 
-                    total += la.size(0)
+                        total += la.size(0)
 
-                    a = func.softmax(outputs)
-                    b = a * label_mask
-                    c = torch.sum(b) / la.size(0)
-                    correct_meanscore += c
-                    correct += (predicted.cpu() == la).sum()
-                    correct_o += (predicted_o.cpu() == la).sum()
+                        a = func.softmax(outputs)
+                        b = a * label_mask
+                        c = torch.sum(b) / la.size(0)
+                        correct_meanscore += c
+                        correct += (predicted.cpu() == la).sum()
+                        correct_o += (predicted_o.cpu() == la).sum()
 
-                    a_i = func.softmax(output_i)
-                    b_i = a_i*label_mask_i
-                    c_i = torch.sum(b_i) / la.size(0)
-                    correct_meanscore_i += c_i
-                    correct_i += (predicted_i.cpu() == la).sum()
-                    correct_io += (predicted_io.cpu() == la).sum()
+                        a_i = func.softmax(output_i)
+                        b_i = a_i*label_mask_i
+                        c_i = torch.sum(b_i) / la.size(0)
+                        correct_meanscore_i += c_i
+                        correct_i += (predicted_i.cpu() == la).sum()
+                        correct_io += (predicted_io.cpu() == la).sum()
 
-                    # if j % 100 == 0:
-                    #     torchvision.utils.save_image(img_test_resized.data.cpu(),
-                    #                                  './data/table1_img50/vgg/epoch%dimages_%d.jpg' % (epoch + 1, j))
-                    #     torchvision.utils.save_image(mask_test.data.cpu(),
-                    #                                  './data/table1_img50/vgg/epoch%dnoise_%d.jpg' % (epoch + 1, j))
-                    #     torchvision.utils.save_image(reconst_images.data.cpu(),
-                    #                                  './data/table1_img50/vgg/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
-                correct_meanscore /= len(self.test_loader)
-                correct_meanscore_i /= len(self.test_loader)
+                        if j % 100 == 0:
+                            torchvision.utils.save_image(img_test_resized.data.cpu(),
+                                                         './data/table1_img50/dense/epoch%dimages_%d.jpg' % (epoch + 1, j))
+                            torchvision.utils.save_image(mask_test.data.cpu(),
+                                                         './data/table1_img50/dense/epoch%dnoise_%d.jpg' % (epoch + 1, j))
+                            torchvision.utils.save_image(reconst_images.data.cpu(),
+                                                         './data/table1_img50/dense/epoch%dreconst_images_%d.jpg' % (epoch + 1, j))
+                    correct_meanscore /= len(self.test_loader)
+                    correct_meanscore_i /= len(self.test_loader)
 
-                print('Test Accuracy of the cls on the masked images for vgg: %.4f %% - %.4f %% - %.4f' % (100 * correct / total, 100* correct_o / total, correct / correct_o))
-                print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
-                print('Test Accuracy of the cls on the masked images for resnet 50: %.4f %% - %.4f %% - %.4f' % (100 * correct_i / total, 100*correct_io / total, correct_i/ correct_io))
-                print('Mean Accuracy: %.4f' % correct_meanscore_i.data[0])
+                    print('Test Accuracy of the cls on the masked images for densenet169: %.4f %% - %.4f %% - %.4f' % (100 * correct / total, 100* correct_o / total, correct / correct_o))
+                    print('Mean Accuracy: %.4f' % correct_meanscore.data[0])
+                    print('Test Accuracy of the cls on the masked images for resnet 50: %.4f %% - %.4f %% - %.4f' % (100 * correct_i / total, 100*correct_io / total, correct_i/ correct_io))
+                    print('Mean Accuracy: %.4f' % correct_meanscore_i.data[0])
 
-                if correct / total > best_score:
-                    best_score = correct / total
-                    print("saving best model...")
-                        #torch.save(self.encoder.state_dict(), './data/table1_img50/vgg/best-encoder.pth')
-                        #torch.save(self.decoder.state_dict(), './data/table1_img50/vgg/best-decoder.pth')
-                        #torch.save(self.discriminator.state_dict(), './data/table1_img50/vgg/best-discriminator.pth')
-                        #torch.save(self.optim_G_dis.state_dict(), './data/table1_img50/vgg/best-optimizer.pth')
+                    if correct / total > best_score:
+                        best_score = correct / total
+                        print("saving best model...")
+                        torch.save(self.encoder.state_dict(), './data/table1_img50/dense/best-encoder.pth')
+                        torch.save(self.decoder.state_dict(), './data/table1_img50/dense/best-decoder.pth')
+                        torch.save(self.discriminator.state_dict(), './data/table1_img50/dense/best-discriminator.pth')
+                        torch.save(self.optim_G_dis.state_dict(), './data/table1_img50/dense/best-optimizer.pth')
 
 
