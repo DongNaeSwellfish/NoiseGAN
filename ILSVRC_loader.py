@@ -18,6 +18,7 @@ def get_loader(args):
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            normalize,
         ])),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
@@ -27,6 +28,7 @@ def get_loader(args):
             transforms.Scale(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
+            normalize,
         ])),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
