@@ -257,7 +257,7 @@ class Trainer(object):
                     for index in range(self.batch_size):
                         #if image_class.data[index] == self.cls:
                         gt_idx[index] = np_image_class[index]
-                        if cls_class.cpu().data.numpy()[index] == np_image_class[index] and \
+                        if cls_class.cpu().data.numpy()[index] == np_image_class[index] or \
                                         cls_class_m.cpu().data.numpy()[index] == np_image_class[index]:  # if real true
                             # put the elements in the p_bank in any location
                             cls0_mask[index] = 1
