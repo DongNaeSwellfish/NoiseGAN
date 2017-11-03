@@ -247,7 +247,7 @@ class Trainer(object):
                 # cls result of the combined image
                 image_result = images_resized.detach() + self.plambda* mask
                 if se_mode == 1:
-                    _, cls_class = torch.max(func.softmax(self.cnn(mask.detach())), 1)  # cls that mask denoting..
+                    _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())), 1)  # cls that mask denoting..
                 else:
                     _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())),
                                              1)  # cls that mask denoting..
