@@ -241,9 +241,6 @@ class Trainer(object):
                 self.discriminator.zero_grad()
                 mask = self.decoder(self.encoder(images_resized))
 
-
-
-
                 # cls result of the combined image
                 image_result = images_resized.detach() + self.plambda* mask
                 _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())), 1)
