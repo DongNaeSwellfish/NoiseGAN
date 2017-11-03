@@ -246,11 +246,8 @@ class Trainer(object):
 
                 # cls result of the combined image
                 image_result = images_resized.detach() + self.plambda* mask
-                if se_mode == 1:
-                    _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())), 1)  # cls that mask denoting..
-                else:
-                    _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())),
-                                             1)  # cls that mask denoting..
+                _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())), 1)
+                _, cls_class_m = torch.max(func.softmax(self.cnn(mask.detach())), 1)
                 _, cls_class_o = torch.max(func.softmax(self.cnn(images_resized.detach())), 1)
 
                 #mask setting + bank stack
@@ -263,7 +260,8 @@ class Trainer(object):
                     for index in range(self.batch_size):
                         #if image_class.data[index] == self.cls:
                         gt_idx[index] = np_image_class[index]
-                        if cls_class.cpu().data.numpy()[index] == np_image_class[index]: # if real true
+                        if cls_class.cpu().data.numpy()[index] == np_image_class[index] and \
+                                        cls_class_m.cpu().data.numpy()[index] == np_image_class[index]:  # if real true
                             # put the elements in the p_bank in any location
                             cls0_mask[index] = 1
                             cls1_mask[index] = 1
