@@ -64,10 +64,10 @@ class Trainer(object):
 
         #self.optim_C = optim.Adam(self.cnn.fc.parameters(), lr=0.0005)
         #scratch_params = list(self.decoder_scratch.parameters()) + list(self.encoder_scratch.parameters())
-        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.0001)
+        self.optim_G_dis = optim.Adam(self.decoder.parameters(), lr=0.00001)
         self.optim_G_cls = optim.Adam(self.decoder_scratch.parameters(), lr=0.0001)
         self.optim_G = optim.Adam(self.decoder.parameters(), lr = 0.0001)
-        self.optim_D = optim.Adam(self.discriminator.disc.fc.parameters(), lr=0.0001)
+        self.optim_D = optim.Adam(self.discriminator.disc.fc.parameters(), lr=0.00001)
         #self.optim_D_cls = optim.Adam(self.discriminator_cls.parameters(), lr=0.0001)
         self.optim_L1 = optim.Adam(self.decoder.parameters(), lr=0.001)
         #self.optim_I = optim.Adam(self.imitator.fc.parameters(), lr = 0.001)
