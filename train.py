@@ -243,8 +243,7 @@ class Trainer(object):
 
                 # cls result of the combined image
                 image_result = images_resized.detach() + self.plambda* mask
-                _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())), 1)
-                _, cls_class_m = torch.max(func.softmax(self.cnn(mask.detach())), 1)
+                _, cls_class = torch.max(func.softmax(self.cnn(image_result.detach())), 1)                
                 _, cls_class_o = torch.max(func.softmax(self.cnn(images_resized.detach())), 1)
 
                 #mask setting + bank stack
@@ -257,8 +256,7 @@ class Trainer(object):
                     for index in range(self.batch_size):
                         #if image_class.data[index] == self.cls:
                         gt_idx[index] = np_image_class[index]
-                        if cls_class.cpu().data.numpy()[index] == np_image_class[index] or \
-                                        cls_class_m.cpu().data.numpy()[index] == np_image_class[index]:  # if real true
+                        if cls_class.cpu().data.numpy()[index] == np_image_class[index] 
                             # put the elements in the p_bank in any location
                             cls0_mask[index] = 1
                             cls1_mask[index] = 1
@@ -290,7 +288,7 @@ class Trainer(object):
 
                 #input batch
                 #disc_result = torch.cat((images_resized.detach(), mask), 1)
-                logit_real = self.discriminator(image_result)
+                logit_real = self.discriminator(mask)
                 glogit_real = torch.gather(logit_real, 1, gt_idx)
                 loss_real_real = self.criterion_D(glogit_real, cls0_mask)
 
@@ -310,7 +308,7 @@ class Trainer(object):
                 self.discriminator.zero_grad()
                 self.decoder.zero_grad()
 
-                logit_fake = self.discriminator(image_result)
+                logit_fake = self.discriminator(mask)
                 glogit_fake = torch.gather(logit_fake, 1, gt_idx)
                 loss_fake_real = self.criterion_D(glogit_fake, cls1_mask) #all the labels to be true
 
@@ -320,7 +318,7 @@ class Trainer(object):
 
 
                 if se_mode == 1: #for enhancing problem
-                    gamma_l1 = 50
+                    gamma_l1 = 0
                     gamma_l2 = 0
                 elif se_mode == 2: #for adversarial
                     #gamma_l1 = 20
