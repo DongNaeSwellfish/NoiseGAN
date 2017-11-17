@@ -1,34 +1,34 @@
 import torch
 from torchvision import transforms
-# from dataloader import get_loader
-from train import Trainer
+#from dataloader import get_loader
 from ILSVRC_loader import get_loader
-#from eval import Eval
+from train import Trainer
 import argparse
-import os
+#from eval import Eval
 
 
 
 def main(config):
-    # train_transform = transforms.Compose([transforms.ToTensor()])
-    # test_transform = transforms.Compose([transforms.ToTensor()])
-    # trainloader = get_loader('train', train_transform)
-    # testloader = get_loader('test', test_transform)
-    # trainer = Trainer(trainloader, testloader)
-    #trainer.train_classifier()
-    #trainer.train_adversarial()
-    # trainer.evaluation()
+    #train_transform = transforms.Compose([transforms.ToTensor()])
+    #test_transform = transforms.Compose([transforms.ToTensor()])
+    #trainloader = get_loader('train', train_transform, config)
+    #testloader = get_loader('test', test_transform)\
     trainloader, testloader = get_loader(config)
-    trainer = Trainer(trainloader, testloader, config)
-    # trainer.train_classifier(config)
-    # trainer.train_conv_mask(config)
-    trainer.train_adversarial(config)
-    # elif config.mode == 'sample':
+    #trainer = Trainer(trainloader, testloader)
+    trainer = Trainer(trainloader, testloader)
+
+    #trainer.train_classifier()
+    #trainer.qualitative_evaluation() #/home/yjyoo/Code/imgnet
+    # if 1= enhance, 2 = adversarial.
+    # second term denotes the target classifiers.
+    #for testing black box setting, set ImgNetPretrained=True in Discriminator_cls
+    trainer.train_adversarial(1, 5)
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-    parser.add_argument('--data', default='/home/mipal/psw_exp/exp_adv/NoiseGAN/imagenet50', type=str,
+    parser.add_argument('--data', default='/home/yjyoo/Code/imagenet50', type=str,
                         metavar='DIR',
                         help='path to dataset')
     parser.add_argument('-j', '--workers', default=3, type=int, metavar='N',
@@ -37,7 +37,7 @@ if __name__ == "__main__":
                         help='number of total epochs to run')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts)')
-    parser.add_argument('-b', '--batch-size', default=20, type=int,
+    parser.add_argument('-b', '--batch-size', default=10, type=int,
                         metavar='N', help='mini-batch size (default: 256)')
     parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                         metavar='LR', help='initial learning rate')

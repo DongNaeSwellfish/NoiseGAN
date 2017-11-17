@@ -7,5 +7,5 @@ from torchvision import transforms
 
 def get_loader(split, transform):
     dataset = dsets.STL10(root='./data/', split=split, transform=transform, download=False)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=50, shuffle=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=10, shuffle=True)
     return dataloader

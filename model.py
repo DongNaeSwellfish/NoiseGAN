@@ -1,5 +1,7 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 import torchvision.models as models
 
 
@@ -56,9 +58,9 @@ class Decoder(nn.Module):
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.encoder = models.resnet50(pretrained=True)
+        self.encoder = models.resnet50(pretrained=True) #true for testing setting
         self.encoder = nn.Sequential(*list(self.encoder.children())[:-2])
-        self.finetune(allow=False)
+        self.finetune(allow=False) # false for testing setting
 
     def forward(self, x):
         out = self.encoder(x)                          # (?, 2048, 7, 7)
@@ -126,7 +128,7 @@ class Discriminator(nn.Module):
 
     def __init__(self, image_size=224, conv_dim=128):
         super(Discriminator, self).__init__()
-        self.conv1 = conv(3, conv_dim, 4, bn=False)
+        self.conv1 = conv(6, conv_dim, 4, bn=False)
         self.conv2 = conv(conv_dim, conv_dim * 2, 4)
         self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
         self.conv4 = conv(conv_dim * 4, conv_dim * 8, 4)
@@ -146,23 +148,35 @@ class Discriminator(nn.Module):
         return out, relu_1 ,relu_2, relu_3
 
 class Discriminator_cls(nn.Module):
-    def __init__(self, image_size=224, conv_dim=128):
+    def __init__(self, ImgNetPretrained=False, disc_path=os.path.join('/home', 'yjyoo', 'Code', 'NoiseGAN-blackbox_enhance_LS', 'data',
+                                         'best-pre_resnet50_imgnet10.pth'), num_cls=10):
         super(Discriminator_cls, self).__init__()
-        self.conv1 = conv(3, conv_dim, 4, bn=False)
-        self.conv2 = conv(conv_dim, conv_dim * 2, 4)
-        self.conv3 = conv(conv_dim * 2, conv_dim * 4, 4)
-        self.conv4 = conv(conv_dim * 4, conv_dim * 8, 4)
-        self.conv5 = conv(conv_dim * 8, conv_dim * 8, 4)
-        self.fc = conv(conv_dim * 8, 2, int(image_size / 32), 3, 0, False)
+        self.disc_path = disc_path
 
-    def forward(self, x):  # If image_size is 64, output shape is as below.
-        out = F.leaky_relu(self.conv1(x), 0.05)  # (?, 128, 112, 112)
-        out = F.leaky_relu(self.conv2(out), 0.05)  # (?, 256, 56, 56)
-        out = F.leaky_relu(self.conv3(out), 0.05)  # (?, 512, 28, 28)
-        out = F.leaky_relu(self.conv4(out), 0.05)  # (?, 1024, 14, 14)
-        out = F.leaky_relu(self.conv5(out), 0.05)  # (?, 1024, 7 , 7)
-        out = self.fc(out).squeeze()
-        return out
+        if ImgNetPretrained==False:
+            #self.disc = models.resnet50(pretrained=False)
+            #self.disc.fc = nn.Linear(self.disc.fc.in_features, num_cls)
+            #self.disc = models.vgg16(num_classes=num_cls)
+            #self.disc.load_state_dict(torch.load(self.disc_path))
+            self.disc = models.densenet169(pretrained=False)
+            self.disc.classifier = nn.Linear(self.disc.classifier.in_features, num_cls)
+            self.disc.load_state_dict(torch.load(self.disc_path))
+            print('load pretrained model from %s' % self.disc_path)
+            self.finetune(allow=False)
+        else:
+            self.disc = models.resnet50(pretrained=True)
+            self.disc.fc = nn.Linear(self.disc.fc.in_features, num_cls)
+            self.finetune(allow=True)
+
+
+    def forward(self, x):
+        return F.sigmoid(self.disc(x))
+
+    def finetune(self, allow=False):
+        for param in self.disc.parameters():
+            param.requires_grad = False if allow else False
+        for param in self.disc.classifier.parameters():
+            param.requires_grad = True
 
 #class Discriminator(nn.Module):
 #    """Discriminator containing 4 convolutional layers."""
